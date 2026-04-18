@@ -43,11 +43,38 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const MAX_FILES_PER_REQUEST = 50;
+  const MAX_PATH_LENGTH = 512;
+  if (body.files.length > MAX_FILES_PER_REQUEST) {
+    return NextResponse.json(
+      { error: `Trop de fichiers — max ${MAX_FILES_PER_REQUEST} par requête` },
+      { status: 413 },
+    );
+  }
+
   // Validate each file entry
   for (const f of body.files) {
     if (!f.storagePath || !f.fileName) {
       return NextResponse.json(
         { error: "Chaque fichier doit avoir fileName et storagePath" },
+        { status: 400 },
+      );
+    }
+    if (
+      typeof f.storagePath !== "string" ||
+      typeof f.fileName !== "string" ||
+      f.storagePath.length > MAX_PATH_LENGTH ||
+      f.fileName.length > MAX_PATH_LENGTH
+    ) {
+      return NextResponse.json(
+        { error: "fileName/storagePath invalides" },
+        { status: 400 },
+      );
+    }
+    // Block path traversal / absolute paths
+    if (f.storagePath.includes("..") || f.storagePath.startsWith("/")) {
+      return NextResponse.json(
+        { error: "storagePath contient un chemin interdit" },
         { status: 400 },
       );
     }
