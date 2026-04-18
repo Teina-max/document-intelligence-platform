@@ -230,4 +230,4 @@ and document-intelligence problems for SMEs in France and EU.
 
 **teinateinauri@gmail.com** · [GitHub profile](https://github.com/Teina-max)
 
-License: MIT — see [`LICENSE`](./LICENSE) (add one before accepting external contributions).
+License: [MIT](./LICENSE).
