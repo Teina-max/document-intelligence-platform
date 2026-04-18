@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oferta {{reference_offre}} — Vence manana</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#7F1D1D;padding:24px 32px;text-align:center;">
+              <img src="https://res.cloudinary.com/dttleawx6/image/upload/v1774510122/copy_of_capture_d_cran_2026-03-25_131424-removebg-preview_eu6n9g_11f077.png" alt="ThermoPack" width="180" style="display:block;margin:0 auto;filter:brightness(0) invert(1);">
+            </td>
+          </tr>
+          <!-- Badge palier -->
+          <tr>
+            <td style="padding:24px 32px 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background-color:#7F1D1D;color:#ffffff;font-size:12px;font-weight:700;padding:6px 14px;border-radius:12px;letter-spacing:0.5px;">
+                    &#9888; VENCE MA&Ntilde;ANA
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:20px 32px 0;">
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#1a1a1a;">Estimado/a {{nom_contact}},</p>
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#333333;">
+                <strong>&Uacute;ltimo recordatorio</strong>: nuestra oferta vence <strong>ma&ntilde;ana, {{date_expiration}}</strong>.
+              </p>
+            </td>
+          </tr>
+          <!-- Encart offre -->
+          <tr>
+            <td style="padding:8px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FEF2F2;border-left:4px solid #7F1D1D;border-radius:4px;">
+                <tr>
+                  <td style="padding:16px 20px;">
+                    <p style="margin:0 0 6px;font-size:13px;color:#666;">Referencia oferta</p>
+                    <p style="margin:0 0 14px;font-size:16px;font-weight:700;color:#003B73;">{{reference_offre}}</p>
+                    <p style="margin:0 0 6px;font-size:13px;color:#666;">Importe sin IVA</p>
+                    <p style="margin:0 0 14px;font-size:16px;font-weight:700;color:#1a1a1a;">{{montant_ht}} &euro; sin IVA</p>
+                    <p style="margin:0 0 6px;font-size:13px;color:#666;">Vence el</p>
+                    <p style="margin:0;font-size:16px;font-weight:700;color:#7F1D1D;">&#9888; {{date_expiration}} &mdash; MA&Ntilde;ANA</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Suite texte -->
+          <tr>
+            <td style="padding:16px 32px 0;">
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#333333;">
+                Pasada esta fecha, lamentablemente no podremos garantizar las condiciones tarifarias ni los plazos de entrega indicados en esta oferta.
+              </p>
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#333333;">
+                Si desea mantener esta propuesta, le rogamos que se ponga en contacto con nosotros <strong>hoy mismo</strong> por correo electr&oacute;nico o por tel&eacute;fono.
+              </p>
+            </td>
+          </tr>
+          <!-- CTA -->
+          <tr>
+            <td style="padding:0 32px 8px;" align="center">
+              <a href="mailto:{{expediteur_email}}?subject=Confirmaci%C3%B3n%20oferta%20{{reference_offre}}" style="display:inline-block;background-color:#7F1D1D;color:#ffffff;font-size:15px;font-weight:700;padding:14px 36px;border-radius:6px;text-decoration:none;">
+                Confirmar mi pedido
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 32px 24px;" align="center">
+              <a href="tel:+33160861025" style="display:inline-block;color:#7F1D1D;font-size:13px;font-weight:600;padding:8px;text-decoration:underline;">
+                o llamar al {{tel}}
+              </a>
+            </td>
+          </tr>
+          <!-- Signature -->
+          <tr>
+            <td style="padding:0 32px 24px;border-top:1px solid #e5e7eb;">
+              <p style="margin:20px 0 4px;font-size:14px;font-weight:700;color:#1a1a1a;">{{expediteur_nom}}</p>
+              <p style="margin:0 0 12px;font-size:13px;color:#666;font-style:italic;">{{expediteur_titre}}</p>
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#666;">
+                ThermoPack Industries<br>
+                5, rue L&eacute;on Appert<br>
+                91280 Saint-Pierre-du-Perray &mdash; Francia<br>
+                Tel.: {{tel}}
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#F8FAFC;padding:16px 32px;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#999;">
+                Este mensaje se env&iacute;a autom&aacute;ticamente tras su solicitud de presupuesto. Si no desea recibir estos recordatorios, por favor h&aacute;ganoslo saber respondiendo a este correo.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

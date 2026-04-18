@@ -1,0 +1,1372 @@
+{
+  "updatedAt": "2026-04-08T12:05:44.525Z",
+  "createdAt": "2026-03-26T12:46:43.406Z",
+  "id": "9qirw85dYuAVAOkj",
+  "name": "ThermoPack - WF-001 Ingestion PDF (OCR)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "thermopack/ingest-pdf",
+        "options": {}
+      },
+      "id": "fdc8e61f-ce10-4ebb-b94d-231d90bd4d71",
+      "name": "Webhook Ingestion PDF",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        192,
+        592
+      ],
+      "webhookId": "thermopack-ingest-pdf",
+      "notes": "POST JSON (Content-Type: application/json)\nBody: { pdfBase64: string, fileName: string, storagePath: string, bucket?: string }\n- pdfBase64: contenu du PDF encode en base64\n- fileName: nom du fichier (ex: \"50429576 Polymax SA.pdf\")\n- storagePath: chemin dans Supabase Storage (ex: \"offres/50429576-dynaplast.pdf\")\n- bucket: nom du bucket Storage (defaut: \"pdfs\")\nNote: les donnees du body sont accessibles via $json.body.* dans les nodes suivants."
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || $json;\nlet files;\nif (body.files && Array.isArray(body.files)) {\n  files = body.files;\n} else if (body.storagePath) {\n  files = [{ fileName: body.fileName || 'document.pdf', storagePath: body.storagePath }];\n} else {\n  throw new Error('Input invalide: files array ou storagePath requis');\n}\nif (files.length > 10) {\n  throw new Error('Maximum 10 fichiers par batch. Recu: ' + files.length);\n}\nreturn files.map(f => ({\n  json: { fileName: f.fileName, storagePath: f.storagePath, startTime: Date.now() }\n}));"
+      },
+      "id": "prep-001",
+      "name": "Preparer Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-001",
+      "name": "Loop Fichiers",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        640,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{ANON_SUPABASE_REF}.supabase.co/storage/v1/object/sign/documents/{{ $json.storagePath }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "{{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"expiresIn\": 600}",
+        "options": {}
+      },
+      "id": "sign-001",
+      "name": "Signed URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        600
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "8dC7ey5lrIGxTn4U",
+          "name": "Supabase-Storage-Illig"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const signedPath = $json.signedURL;\nif (!signedPath) throw new Error('Signed URL vide');\nconst fullUrl = 'https://{ANON_SUPABASE_REF}.supabase.co/storage/v1' + signedPath;\nconst loopItem = $('Loop Fichiers').first().json;\nreturn [{ json: { pdfUrl: fullUrl, storagePath: loopItem.storagePath, fileName: loopItem.fileName, startTime: loopItem.startTime } }];"
+      },
+      "id": "url-001",
+      "name": "Preparer URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"claude-sonnet-4-20250514\",\"max_tokens\":4096,\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"document\",\"source\":{\"type\":\"url\",\"url\":\"{{ $json.pdfUrl }}\"}},{\"type\":\"text\",\"text\":\"Tu es un extracteur de donnees specialise dans les documents commerciaux ThermoPack Industries (pieces detachees thermoformage).\\n\\nAnalyse ce document PDF et extrais les informations au format JSON strict.\\n\\nREGLES :\\n1. TYPE : Le titre indique \\\"Offre\\\" (type=offre) ou \\\"Confirmation de commande\\\" (type=commande)\\n2. REFERENCES : Offres commencent par 504, Commandes par 704\\n3. PRIX : Format europeen 6.174,00 EUR = 6174.00 en decimal (point=milliers, virgule=decimales)\\n4. DATES : \\\"13. Janvier 2026\\\" ou \\\"05.03.2026\\\" -> convertir en YYYY-MM-DD\\n5. PAGES : Ignorer pages 3+ (CGV)\\n6. PAYS : FR par defaut. ES si code postal espagnol ou entreprise espagnole connue\\n7. COMMANDE LIEE : Si champ \\\"N de l offre\\\" present -> renseigner reference_offre. Sinon -> null (commande directe)\\n8. REMISES : Peuvent etre cascadees (-20% puis -11%). Calculer le montant final apres remises.\\n9. NUMERO CLIENT : Le \\\"N client\\\" est le numero interne ThermoPack (ex: 701441, 201912)\\n10. COMMANDE CLIENT : \\\"Votre n de commande\\\" = reference du client (ex: 6DY164322)\\n11. MONTANTS : montant_ht et montant_ttc doivent etre lus directement depuis les totaux imprimes sur le document (\\\"Total net\\\", \\\"Montant net HT\\\", \\\"Total TTC\\\"). NE PAS recalculer en sommant les lignes. Les totaux du document incluent les frais de port, emballage, et autres surcharges qui ne sont pas dans les lignes produit.\\n12. FRAIS SUPPLEMENTAIRES : Si le document mentionne des frais de port, emballage, assurance transport ou autres surcharges, les ajouter comme lignes supplementaires dans le tableau \\\"lignes\\\" avec reference_materiel = \\\"FRAIS_PORT\\\", \\\"FRAIS_EMBALLAGE\\\", etc.\\n\\nSTRUCTURE JSON :\\n{\\n  \\\"type_document\\\": \\\"offre | commande\\\",\\n  \\\"reference\\\": \\\"504xxxxx ou 704xxxxx\\\",\\n  \\\"reference_offre\\\": \\\"504xxxxx ou null\\\",\\n  \\\"numero_client\\\": \\\"N client ThermoPack ou null\\\",\\n  \\\"numero_commande_client\\\": \\\"N commande client ou null\\\",\\n  \\\"date_document\\\": \\\"YYYY-MM-DD\\\",\\n  \\\"date_expiration\\\": \\\"YYYY-MM-DD ou null\\\",\\n  \\\"date_expedition\\\": \\\"YYYY-MM-DD ou null\\\",\\n  \\\"entreprise_nom\\\": \\\"Nom entreprise\\\",\\n  \\\"entreprise_adresse\\\": \\\"Adresse complete\\\",\\n  \\\"entreprise_code_postal\\\": \\\"Code postal\\\",\\n  \\\"entreprise_pays\\\": \\\"FR ou ES\\\",\\n  \\\"contact_nom\\\": \\\"Nom du contact ou null\\\",\\n  \\\"contact_telephone\\\": \\\"Telephone ou null\\\",\\n  \\\"contact_email\\\": \\\"Email ou null\\\",\\n  \\\"correspondant\\\": \\\"Correspondant ThermoPack\\\",\\n  \\\"lignes\\\": [{ \\\"position\\\": 10, \\\"reference_materiel\\\": \\\"code\\\", \\\"designation\\\": \\\"piece\\\", \\\"quantite\\\": 1, \\\"prix_unitaire\\\": 0.00, \\\"montant_ligne\\\": 0.00 }],\\n  \\\"montant_ht\\\": 0.00,\\n  \\\"montant_ttc\\\": 0.00,\\n  \\\"conditions_paiement\\\": \\\"texte ou null\\\",\\n  \\\"conditions_livraison\\\": \\\"texte ou null\\\"\\n}\\n\\nReponds UNIQUEMENT avec le JSON valide, sans texte ni commentaires.\"}]}]}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "7a99293e-8165-43c4-b34c-50b48ec18e40",
+      "name": "Extraction OCR Claude",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1552,
+        528
+      ],
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{ANON_CLAUDE_CRED_ID}",
+          "name": "Claude-API"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Appel API Anthropic Claude Vision.\nCredential httpHeaderAuth: x-api-key = cle API Anthropic."
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst loopItem = $('Loop Fichiers').first().json;\nconst content = item.json.content?.[0]?.text || '';\nlet jsonStr = content.trim();\nconst codeMatch = jsonStr.match(/```(?:json)?\\s*([\\s\\S]*?)```/);\nif (codeMatch) jsonStr = codeMatch[1].trim();\nif (!jsonStr.startsWith('{')) {\n  const objMatch = jsonStr.match(/\\{[\\s\\S]*\\}/);\n  if (objMatch) jsonStr = objMatch[0];\n}\njsonStr = jsonStr.replace(/([,{\\n]\\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\\s*\"?\\s*:)/g, '$1\"$2\"$3');\njsonStr = jsonStr.replace(/\"\"([^\"]+)\"\"/g, '\"$1\"');\nconst parsed = JSON.parse(jsonStr);\nif (!parsed.type_document) throw new Error('type_document manquant');\nif (!parsed.reference) throw new Error('reference manquante');\nif (!parsed.entreprise_nom) throw new Error('entreprise_nom manquant');\nif (!['offre', 'commande'].includes(parsed.type_document)) throw new Error('type_document invalide: ' + parsed.type_document);\nreturn [{ json: { ...parsed, storagePath: loopItem.storagePath || '', fileName: loopItem.fileName || 'document.pdf', dureeMs: Date.now() - (loopItem.startTime || Date.now()) } }];"
+      },
+      "id": "3cfabf4b-1b11-46be-a870-a8a26db2aa1d",
+      "name": "Parser et Valider",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        456
+      ],
+      "onError": "continueErrorOutput",
+      "notes": "Parse le JSON de Claude, valide les champs requis (type_document, reference, entreprise_nom)."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/rpc/upsert_entreprise",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ p_nom: $json.entreprise_nom, p_code_postal: $json.entreprise_code_postal || null, p_pays: $json.entreprise_pays || 'FR', p_adresse: $json.entreprise_adresse || null, p_contact_nom: $json.contact_nom || null, p_contact_telephone: $json.contact_telephone || null, p_contact_email: $json.contact_email || null, p_numero_client: $json.numero_client || null }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "id": "d0c40251-f4e4-4076-ad11-7f09cbf3c067",
+      "name": "Upsert Entreprise",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        384
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Appelle la RPC upsert_entreprise() sur Supabase.\nInsert ou update l'entreprise (ON CONFLICT nom+code_postal).\nRetourne l'UUID de l'entreprise (creee ou existante).\nRemplace l'ancien pattern Chercher/IF/Creer qui echouait sur les doublons."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fusionne l'entreprise_id (RPC) avec les donnees OCR\nconst rpcResponse = $input.first().json;\nconst ocrData = $('Parser et Valider').first().json;\n\n// La RPC retourne un UUID en texte (responseFormat=text)\n// $json.data contient la string brute, ex: '\"uuid-value\"'\nlet entrepriseId = (rpcResponse.data || '').trim().replace(/^\"|\"$/g, '');\n\nif (!entrepriseId || entrepriseId.length < 10) {\n  throw new Error('upsert_entreprise n\\'a pas retourne d\\'UUID. Response: ' + JSON.stringify(rpcResponse));\n}\n\nreturn [{\n  json: {\n    entreprise_id: entrepriseId,\n    type_document: ocrData.type_document,\n    reference: ocrData.reference,\n    reference_offre: ocrData.reference_offre || null,\n    numero_client: ocrData.numero_client || null,\n    numero_commande_client: ocrData.numero_commande_client || null,\n    date_document: ocrData.date_document,\n    date_expiration: ocrData.date_expiration || null,\n    date_expedition: ocrData.date_expedition || null,\n    correspondant: ocrData.correspondant || null,\n    lignes: ocrData.lignes || [],\n    montant_ht: ocrData.montant_ht || 0,\n    montant_ttc: ocrData.montant_ttc || 0,\n    conditions_paiement: ocrData.conditions_paiement || null,\n    conditions_livraison: ocrData.conditions_livraison || null,\n    storagePath: ocrData.storagePath,\n    fileName: ocrData.fileName,\n    dureeMs: ocrData.dureeMs\n  }\n}];"
+      },
+      "id": "0dec0454-7941-4ba6-a3bf-4bcaf950b4a1",
+      "name": "Preparer Document",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        336
+      ],
+      "notes": "Recupere l'UUID entreprise de la RPC et le merge avec les donnees OCR pour l'insertion document."
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 2,
+        "output": "={{ $json.type_document === 'offre' ? 0 : 1 }}"
+      },
+      "id": "65fe9dfa-67fd-40aa-a811-c98cc6275122",
+      "name": "Offre ou Commande ?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        2448,
+        336
+      ],
+      "notes": "Switch expression sur $json.type_document. Output 0 = offre, Output 1 = commande, Output 2 = fallback."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/offres?on_conflict=reference_offre",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ reference_offre: $json.reference, entreprise_id: $json.entreprise_id, montant_ht: $json.montant_ht, montant_ttc: $json.montant_ttc, date_offre: $json.date_document, date_expiration: $json.date_expiration, statut: 'en_attente', correspondant: $json.correspondant, designations: JSON.stringify($json.lignes), fichier_source: $json.storagePath }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "b624938b-4f7b-4735-9c9d-54b7739d42b2",
+      "name": "Inserer Offre",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2672,
+        240
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "notes": "POST avec on_conflict=reference_offre + resolution=merge-duplicates = UPSERT.\nSi l'offre existe deja, les champs sont mis a jour. Sinon, insertion."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/commandes?on_conflict=reference_commande",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ reference_commande: $json.reference, entreprise_id: $json.entreprise_id, montant_ht: $json.montant_ht, montant_ttc: $json.montant_ttc, date_commande: $json.date_document, date_expedition: $json.date_expedition, type: $json.reference_offre ? 'egale' : 'directe', designations: JSON.stringify($json.lignes), fichier_source: $json.storagePath, numero_commande_client: $json.numero_commande_client, reference_offre: $json.reference_offre }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "6a6c956c-fde9-430c-88ee-f32ddfb497a4",
+      "name": "Inserer Commande",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2672,
+        504
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "notes": "POST avec on_conflict=reference_commande + resolution=merge-duplicates = UPSERT.\ntype = 'directe' si pas de reference_offre, 'egale' sinon (affine par WF-002)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare les donnees pour le log OCR succes\nconst insertResult = $input.first().json;\nconst ocrData = $('Parser et Valider').first().json;\n\n// HTTP Request PostgREST returns array with return=representation\nconst record = Array.isArray(insertResult) ? insertResult[0] : insertResult;\n\nreturn [{\n  json: {\n    fichier_source: ocrData.storagePath || '',\n    type_document: ocrData.type_document,\n    statut: 'success',\n    donnees_extraites: JSON.stringify(ocrData),\n    erreurs: null,\n    score_confiance: 0.95,\n    record_id: record?.id || null,\n    duree_ms: ocrData.dureeMs || 0\n  }\n}];"
+      },
+      "id": "d1108824-d7fb-4e88-8959-c09e77a52765",
+      "name": "Preparer Log Succes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2896,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "ocr_logs",
+        "dataToSend": "autoMapInputData"
+      },
+      "id": "21d6c568-9798-4454-b023-efb9973627f7",
+      "name": "Log OCR Succes",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        3024,
+        624
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nlet storagePath = 'unknown';\ntry { storagePath = $('Loop Fichiers').first().json.storagePath || 'unknown'; } catch(e) {}\n\n// Deep extract error message from various n8n error formats\nlet errorMsg = 'Unknown error';\nif (typeof data.error === 'string') {\n  errorMsg = data.error;\n} else if (typeof data.message === 'string') {\n  errorMsg = data.message;\n} else if (data.error?.message) {\n  errorMsg = data.error.message;\n} else if (data.error) {\n  errorMsg = JSON.stringify(data.error).substring(0, 500);\n} else {\n  errorMsg = JSON.stringify(data).substring(0, 500);\n}\n\nreturn [{ json: {\n  fichier_source: storagePath,\n  type_document: data.type_document || 'unknown',\n  statut: 'failed',\n  donnees_extraites: JSON.stringify({ error: errorMsg, keys: Object.keys(data) }),\n  erreurs: [errorMsg],\n  score_confiance: 0, record_id: null, duree_ms: 0\n} }];"
+      },
+      "id": "c259e6e2-fad9-4c91-816b-65f252afe060",
+      "name": "Preparer Erreur",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2224,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "ocr_logs",
+        "dataToSend": "autoMapInputData"
+      },
+      "id": "fff85852-877c-46f5-8f29-881e0e3d5863",
+      "name": "Log OCR Erreur",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2448,
+        624
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "id": "wait-10s-001",
+      "name": "Wait 10s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1328,
+        528
+      ],
+      "webhookId": "wait-10s-ocr"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-latest-lbvm.onrender.com/webhook/thermopack/rapprochement",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "rapproch-001",
+      "name": "Rapprochement Post-Batch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        416
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Ingestion PDF": {
+      "main": [
+        [
+          {
+            "node": "Preparer Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer Items": {
+      "main": [
+        [
+          {
+            "node": "Loop Fichiers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Fichiers": {
+      "main": [
+        [
+          {
+            "node": "Rapprochement Post-Batch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Signed URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signed URL": {
+      "main": [
+        [
+          {
+            "node": "Preparer URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparer Erreur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer URL": {
+      "main": [
+        [
+          {
+            "node": "Wait 10s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraction OCR Claude": {
+      "main": [
+        [
+          {
+            "node": "Parser et Valider",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparer Erreur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser et Valider": {
+      "main": [
+        [
+          {
+            "node": "Upsert Entreprise",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparer Erreur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Entreprise": {
+      "main": [
+        [
+          {
+            "node": "Preparer Document",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparer Erreur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer Document": {
+      "main": [
+        [
+          {
+            "node": "Offre ou Commande ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offre ou Commande ?": {
+      "main": [
+        [
+          {
+            "node": "Inserer Offre",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Inserer Commande",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inserer Offre": {
+      "main": [
+        [
+          {
+            "node": "Preparer Log Succes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inserer Commande": {
+      "main": [
+        [
+          {
+            "node": "Preparer Log Succes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer Log Succes": {
+      "main": [
+        [
+          {
+            "node": "Log OCR Succes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log OCR Succes": {
+      "main": [
+        [
+          {
+            "node": "Loop Fichiers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer Erreur": {
+      "main": [
+        [
+          {
+            "node": "Log OCR Erreur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log OCR Erreur": {
+      "main": [
+        [
+          {
+            "node": "Loop Fichiers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 10s": {
+      "main": [
+        [
+          {
+            "node": "Extraction OCR Claude",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "ca4b20e4-ce9e-4194-8833-4f82636fe121",
+  "activeVersionId": "ca4b20e4-ce9e-4194-8833-4f82636fe121",
+  "versionCounter": 107,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-03-26T12:46:43.410Z",
+      "createdAt": "2026-03-26T12:46:43.410Z",
+      "role": "workflow:owner",
+      "workflowId": "9qirw85dYuAVAOkj",
+      "projectId": "O7LZ54FANArycjaL",
+      "project": {
+        "updatedAt": "2026-03-26T11:55:34.833Z",
+        "createdAt": "2026-03-26T11:50:47.448Z",
+        "id": "O7LZ54FANArycjaL",
+        "name": "younes belkharraf <younes@ladinguerie.fr>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "2a544a42-b8a8-4d8c-adfa-37180eceb35c"
+      }
+    }
+  ],
+  "tags": [
+    {
+      "updatedAt": "2026-03-27T15:26:49.817Z",
+      "createdAt": "2026-03-27T15:26:49.817Z",
+      "id": "8HJoqYeLRVz7Wjfc",
+      "name": "ThermoPack"
+    }
+  ],
+  "activeVersion": {
+    "updatedAt": "2026-04-08T12:05:44.528Z",
+    "createdAt": "2026-04-08T12:05:44.528Z",
+    "versionId": "ca4b20e4-ce9e-4194-8833-4f82636fe121",
+    "workflowId": "9qirw85dYuAVAOkj",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "thermopack/ingest-pdf",
+          "options": {}
+        },
+        "id": "fdc8e61f-ce10-4ebb-b94d-231d90bd4d71",
+        "name": "Webhook Ingestion PDF",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          192,
+          592
+        ],
+        "webhookId": "thermopack-ingest-pdf",
+        "notes": "POST JSON (Content-Type: application/json)\nBody: { pdfBase64: string, fileName: string, storagePath: string, bucket?: string }\n- pdfBase64: contenu du PDF encode en base64\n- fileName: nom du fichier (ex: \"50429576 Polymax SA.pdf\")\n- storagePath: chemin dans Supabase Storage (ex: \"offres/50429576-dynaplast.pdf\")\n- bucket: nom du bucket Storage (defaut: \"pdfs\")\nNote: les donnees du body sont accessibles via $json.body.* dans les nodes suivants."
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $json.body || $json;\nlet files;\nif (body.files && Array.isArray(body.files)) {\n  files = body.files;\n} else if (body.storagePath) {\n  files = [{ fileName: body.fileName || 'document.pdf', storagePath: body.storagePath }];\n} else {\n  throw new Error('Input invalide: files array ou storagePath requis');\n}\nif (files.length > 10) {\n  throw new Error('Maximum 10 fichiers par batch. Recu: ' + files.length);\n}\nreturn files.map(f => ({\n  json: { fileName: f.fileName, storagePath: f.storagePath, startTime: Date.now() }\n}));"
+        },
+        "id": "prep-001",
+        "name": "Preparer Items",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          416,
+          592
+        ]
+      },
+      {
+        "parameters": {
+          "batchSize": 1,
+          "options": {}
+        },
+        "id": "loop-001",
+        "name": "Loop Fichiers",
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          640,
+          592
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://{ANON_SUPABASE_REF}.supabase.co/storage/v1/object/sign/documents/{{ $json.storagePath }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "{{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\"expiresIn\": 600}",
+          "options": {}
+        },
+        "id": "sign-001",
+        "name": "Signed URL",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          880,
+          600
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "8dC7ey5lrIGxTn4U",
+            "name": "Supabase-Storage-Illig"
+          }
+        },
+        "onError": "continueErrorOutput"
+      },
+      {
+        "parameters": {
+          "jsCode": "const signedPath = $json.signedURL;\nif (!signedPath) throw new Error('Signed URL vide');\nconst fullUrl = 'https://{ANON_SUPABASE_REF}.supabase.co/storage/v1' + signedPath;\nconst loopItem = $('Loop Fichiers').first().json;\nreturn [{ json: { pdfUrl: fullUrl, storagePath: loopItem.storagePath, fileName: loopItem.fileName, startTime: loopItem.startTime } }];"
+        },
+        "id": "url-001",
+        "name": "Preparer URL",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1104,
+          528
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "anthropic-version",
+                "value": "2023-06-01"
+              },
+              {
+                "name": "content-type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\"model\":\"claude-sonnet-4-20250514\",\"max_tokens\":4096,\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"document\",\"source\":{\"type\":\"url\",\"url\":\"{{ $json.pdfUrl }}\"}},{\"type\":\"text\",\"text\":\"Tu es un extracteur de donnees specialise dans les documents commerciaux ThermoPack Industries (pieces detachees thermoformage).\\n\\nAnalyse ce document PDF et extrais les informations au format JSON strict.\\n\\nREGLES :\\n1. TYPE : Le titre indique \\\"Offre\\\" (type=offre) ou \\\"Confirmation de commande\\\" (type=commande)\\n2. REFERENCES : Offres commencent par 504, Commandes par 704\\n3. PRIX : Format europeen 6.174,00 EUR = 6174.00 en decimal (point=milliers, virgule=decimales)\\n4. DATES : \\\"13. Janvier 2026\\\" ou \\\"05.03.2026\\\" -> convertir en YYYY-MM-DD\\n5. PAGES : Ignorer pages 3+ (CGV)\\n6. PAYS : FR par defaut. ES si code postal espagnol ou entreprise espagnole connue\\n7. COMMANDE LIEE : Si champ \\\"N de l offre\\\" present -> renseigner reference_offre. Sinon -> null (commande directe)\\n8. REMISES : Peuvent etre cascadees (-20% puis -11%). Calculer le montant final apres remises.\\n9. NUMERO CLIENT : Le \\\"N client\\\" est le numero interne ThermoPack (ex: 701441, 201912)\\n10. COMMANDE CLIENT : \\\"Votre n de commande\\\" = reference du client (ex: 6DY164322)\\n11. MONTANTS : montant_ht et montant_ttc doivent etre lus directement depuis les totaux imprimes sur le document (\\\"Total net\\\", \\\"Montant net HT\\\", \\\"Total TTC\\\"). NE PAS recalculer en sommant les lignes. Les totaux du document incluent les frais de port, emballage, et autres surcharges qui ne sont pas dans les lignes produit.\\n12. FRAIS SUPPLEMENTAIRES : Si le document mentionne des frais de port, emballage, assurance transport ou autres surcharges, les ajouter comme lignes supplementaires dans le tableau \\\"lignes\\\" avec reference_materiel = \\\"FRAIS_PORT\\\", \\\"FRAIS_EMBALLAGE\\\", etc.\\n\\nSTRUCTURE JSON :\\n{\\n  \\\"type_document\\\": \\\"offre | commande\\\",\\n  \\\"reference\\\": \\\"504xxxxx ou 704xxxxx\\\",\\n  \\\"reference_offre\\\": \\\"504xxxxx ou null\\\",\\n  \\\"numero_client\\\": \\\"N client ThermoPack ou null\\\",\\n  \\\"numero_commande_client\\\": \\\"N commande client ou null\\\",\\n  \\\"date_document\\\": \\\"YYYY-MM-DD\\\",\\n  \\\"date_expiration\\\": \\\"YYYY-MM-DD ou null\\\",\\n  \\\"date_expedition\\\": \\\"YYYY-MM-DD ou null\\\",\\n  \\\"entreprise_nom\\\": \\\"Nom entreprise\\\",\\n  \\\"entreprise_adresse\\\": \\\"Adresse complete\\\",\\n  \\\"entreprise_code_postal\\\": \\\"Code postal\\\",\\n  \\\"entreprise_pays\\\": \\\"FR ou ES\\\",\\n  \\\"contact_nom\\\": \\\"Nom du contact ou null\\\",\\n  \\\"contact_telephone\\\": \\\"Telephone ou null\\\",\\n  \\\"contact_email\\\": \\\"Email ou null\\\",\\n  \\\"correspondant\\\": \\\"Correspondant ThermoPack\\\",\\n  \\\"lignes\\\": [{ \\\"position\\\": 10, \\\"reference_materiel\\\": \\\"code\\\", \\\"designation\\\": \\\"piece\\\", \\\"quantite\\\": 1, \\\"prix_unitaire\\\": 0.00, \\\"montant_ligne\\\": 0.00 }],\\n  \\\"montant_ht\\\": 0.00,\\n  \\\"montant_ttc\\\": 0.00,\\n  \\\"conditions_paiement\\\": \\\"texte ou null\\\",\\n  \\\"conditions_livraison\\\": \\\"texte ou null\\\"\\n}\\n\\nReponds UNIQUEMENT avec le JSON valide, sans texte ni commentaires.\"}]}]}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "id": "7a99293e-8165-43c4-b34c-50b48ec18e40",
+        "name": "Extraction OCR Claude",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1552,
+          528
+        ],
+        "retryOnFail": true,
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "{ANON_CLAUDE_CRED_ID}",
+            "name": "Claude-API"
+          }
+        },
+        "onError": "continueErrorOutput",
+        "notes": "Appel API Anthropic Claude Vision.\nCredential httpHeaderAuth: x-api-key = cle API Anthropic."
+      },
+      {
+        "parameters": {
+          "jsCode": "const item = $input.first();\nconst loopItem = $('Loop Fichiers').first().json;\nconst content = item.json.content?.[0]?.text || '';\nlet jsonStr = content.trim();\nconst codeMatch = jsonStr.match(/```(?:json)?\\s*([\\s\\S]*?)```/);\nif (codeMatch) jsonStr = codeMatch[1].trim();\nif (!jsonStr.startsWith('{')) {\n  const objMatch = jsonStr.match(/\\{[\\s\\S]*\\}/);\n  if (objMatch) jsonStr = objMatch[0];\n}\njsonStr = jsonStr.replace(/([,{\\n]\\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\\s*\"?\\s*:)/g, '$1\"$2\"$3');\njsonStr = jsonStr.replace(/\"\"([^\"]+)\"\"/g, '\"$1\"');\nconst parsed = JSON.parse(jsonStr);\nif (!parsed.type_document) throw new Error('type_document manquant');\nif (!parsed.reference) throw new Error('reference manquante');\nif (!parsed.entreprise_nom) throw new Error('entreprise_nom manquant');\nif (!['offre', 'commande'].includes(parsed.type_document)) throw new Error('type_document invalide: ' + parsed.type_document);\nreturn [{ json: { ...parsed, storagePath: loopItem.storagePath || '', fileName: loopItem.fileName || 'document.pdf', dureeMs: Date.now() - (loopItem.startTime || Date.now()) } }];"
+        },
+        "id": "3cfabf4b-1b11-46be-a870-a8a26db2aa1d",
+        "name": "Parser et Valider",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1776,
+          456
+        ],
+        "onError": "continueErrorOutput",
+        "notes": "Parse le JSON de Claude, valide les champs requis (type_document, reference, entreprise_nom)."
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/rpc/upsert_entreprise",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "supabaseApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ p_nom: $json.entreprise_nom, p_code_postal: $json.entreprise_code_postal || null, p_pays: $json.entreprise_pays || 'FR', p_adresse: $json.entreprise_adresse || null, p_contact_nom: $json.contact_nom || null, p_contact_telephone: $json.contact_telephone || null, p_contact_email: $json.contact_email || null, p_numero_client: $json.numero_client || null }) }}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "text"
+              }
+            },
+            "timeout": 10000
+          }
+        },
+        "id": "d0c40251-f4e4-4076-ad11-7f09cbf3c067",
+        "name": "Upsert Entreprise",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2000,
+          384
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "{ANON_SUPABASE_CRED_ID}",
+            "name": "Supabase-ThermoPack"
+          }
+        },
+        "onError": "continueErrorOutput",
+        "notes": "Appelle la RPC upsert_entreprise() sur Supabase.\nInsert ou update l'entreprise (ON CONFLICT nom+code_postal).\nRetourne l'UUID de l'entreprise (creee ou existante).\nRemplace l'ancien pattern Chercher/IF/Creer qui echouait sur les doublons."
+      },
+      {
+        "parameters": {
+          "jsCode": "// Fusionne l'entreprise_id (RPC) avec les donnees OCR\nconst rpcResponse = $input.first().json;\nconst ocrData = $('Parser et Valider').first().json;\n\n// La RPC retourne un UUID en texte (responseFormat=text)\n// $json.data contient la string brute, ex: '\"uuid-value\"'\nlet entrepriseId = (rpcResponse.data || '').trim().replace(/^\"|\"$/g, '');\n\nif (!entrepriseId || entrepriseId.length < 10) {\n  throw new Error('upsert_entreprise n\\'a pas retourne d\\'UUID. Response: ' + JSON.stringify(rpcResponse));\n}\n\nreturn [{\n  json: {\n    entreprise_id: entrepriseId,\n    type_document: ocrData.type_document,\n    reference: ocrData.reference,\n    reference_offre: ocrData.reference_offre || null,\n    numero_client: ocrData.numero_client || null,\n    numero_commande_client: ocrData.numero_commande_client || null,\n    date_document: ocrData.date_document,\n    date_expiration: ocrData.date_expiration || null,\n    date_expedition: ocrData.date_expedition || null,\n    correspondant: ocrData.correspondant || null,\n    lignes: ocrData.lignes || [],\n    montant_ht: ocrData.montant_ht || 0,\n    montant_ttc: ocrData.montant_ttc || 0,\n    conditions_paiement: ocrData.conditions_paiement || null,\n    conditions_livraison: ocrData.conditions_livraison || null,\n    storagePath: ocrData.storagePath,\n    fileName: ocrData.fileName,\n    dureeMs: ocrData.dureeMs\n  }\n}];"
+        },
+        "id": "0dec0454-7941-4ba6-a3bf-4bcaf950b4a1",
+        "name": "Preparer Document",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2224,
+          336
+        ],
+        "notes": "Recupere l'UUID entreprise de la RPC et le merge avec les donnees OCR pour l'insertion document."
+      },
+      {
+        "parameters": {
+          "mode": "expression",
+          "numberOutputs": 2,
+          "output": "={{ $json.type_document === 'offre' ? 0 : 1 }}"
+        },
+        "id": "65fe9dfa-67fd-40aa-a811-c98cc6275122",
+        "name": "Offre ou Commande ?",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3,
+        "position": [
+          2448,
+          336
+        ],
+        "notes": "Switch expression sur $json.type_document. Output 0 = offre, Output 1 = commande, Output 2 = fallback."
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/offres?on_conflict=reference_offre",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "supabaseApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "resolution=merge-duplicates,return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ reference_offre: $json.reference, entreprise_id: $json.entreprise_id, montant_ht: $json.montant_ht, montant_ttc: $json.montant_ttc, date_offre: $json.date_document, date_expiration: $json.date_expiration, statut: 'en_attente', correspondant: $json.correspondant, designations: JSON.stringify($json.lignes), fichier_source: $json.storagePath }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "id": "b624938b-4f7b-4735-9c9d-54b7739d42b2",
+        "name": "Inserer Offre",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2672,
+          240
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "{ANON_SUPABASE_CRED_ID}",
+            "name": "Supabase-ThermoPack"
+          }
+        },
+        "notes": "POST avec on_conflict=reference_offre + resolution=merge-duplicates = UPSERT.\nSi l'offre existe deja, les champs sont mis a jour. Sinon, insertion."
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/commandes?on_conflict=reference_commande",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "supabaseApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "resolution=merge-duplicates,return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ reference_commande: $json.reference, entreprise_id: $json.entreprise_id, montant_ht: $json.montant_ht, montant_ttc: $json.montant_ttc, date_commande: $json.date_document, date_expedition: $json.date_expedition, type: $json.reference_offre ? 'egale' : 'directe', designations: JSON.stringify($json.lignes), fichier_source: $json.storagePath, numero_commande_client: $json.numero_commande_client, reference_offre: $json.reference_offre }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "id": "6a6c956c-fde9-430c-88ee-f32ddfb497a4",
+        "name": "Inserer Commande",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2672,
+          504
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "{ANON_SUPABASE_CRED_ID}",
+            "name": "Supabase-ThermoPack"
+          }
+        },
+        "notes": "POST avec on_conflict=reference_commande + resolution=merge-duplicates = UPSERT.\ntype = 'directe' si pas de reference_offre, 'egale' sinon (affine par WF-002)."
+      },
+      {
+        "parameters": {
+          "jsCode": "// Prepare les donnees pour le log OCR succes\nconst insertResult = $input.first().json;\nconst ocrData = $('Parser et Valider').first().json;\n\n// HTTP Request PostgREST returns array with return=representation\nconst record = Array.isArray(insertResult) ? insertResult[0] : insertResult;\n\nreturn [{\n  json: {\n    fichier_source: ocrData.storagePath || '',\n    type_document: ocrData.type_document,\n    statut: 'success',\n    donnees_extraites: JSON.stringify(ocrData),\n    erreurs: null,\n    score_confiance: 0.95,\n    record_id: record?.id || null,\n    duree_ms: ocrData.dureeMs || 0\n  }\n}];"
+        },
+        "id": "d1108824-d7fb-4e88-8959-c09e77a52765",
+        "name": "Preparer Log Succes",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2896,
+          336
+        ]
+      },
+      {
+        "parameters": {
+          "tableId": "ocr_logs",
+          "dataToSend": "autoMapInputData"
+        },
+        "id": "21d6c568-9798-4454-b023-efb9973627f7",
+        "name": "Log OCR Succes",
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          3024,
+          624
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "{ANON_SUPABASE_CRED_ID}",
+            "name": "Supabase-ThermoPack"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const data = $input.first().json;\nlet storagePath = 'unknown';\ntry { storagePath = $('Loop Fichiers').first().json.storagePath || 'unknown'; } catch(e) {}\n\n// Deep extract error message from various n8n error formats\nlet errorMsg = 'Unknown error';\nif (typeof data.error === 'string') {\n  errorMsg = data.error;\n} else if (typeof data.message === 'string') {\n  errorMsg = data.message;\n} else if (data.error?.message) {\n  errorMsg = data.error.message;\n} else if (data.error) {\n  errorMsg = JSON.stringify(data.error).substring(0, 500);\n} else {\n  errorMsg = JSON.stringify(data).substring(0, 500);\n}\n\nreturn [{ json: {\n  fichier_source: storagePath,\n  type_document: data.type_document || 'unknown',\n  statut: 'failed',\n  donnees_extraites: JSON.stringify({ error: errorMsg, keys: Object.keys(data) }),\n  erreurs: [errorMsg],\n  score_confiance: 0, record_id: null, duree_ms: 0\n} }];"
+        },
+        "id": "c259e6e2-fad9-4c91-816b-65f252afe060",
+        "name": "Preparer Erreur",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2224,
+          624
+        ]
+      },
+      {
+        "parameters": {
+          "tableId": "ocr_logs",
+          "dataToSend": "autoMapInputData"
+        },
+        "id": "fff85852-877c-46f5-8f29-881e0e3d5863",
+        "name": "Log OCR Erreur",
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          2448,
+          624
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "{ANON_SUPABASE_CRED_ID}",
+            "name": "Supabase-ThermoPack"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "amount": 10
+        },
+        "id": "wait-10s-001",
+        "name": "Wait 10s",
+        "type": "n8n-nodes-base.wait",
+        "typeVersion": 1.1,
+        "position": [
+          1328,
+          528
+        ],
+        "webhookId": "wait-10s-ocr"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://n8n-latest-lbvm.onrender.com/webhook/thermopack/rapprochement",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={}",
+          "options": {
+            "timeout": 120000
+          }
+        },
+        "id": "rapproch-001",
+        "name": "Rapprochement Post-Batch",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          880,
+          416
+        ]
+      }
+    ],
+    "connections": {
+      "Webhook Ingestion PDF": {
+        "main": [
+          [
+            {
+              "node": "Preparer Items",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparer Items": {
+        "main": [
+          [
+            {
+              "node": "Loop Fichiers",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Loop Fichiers": {
+        "main": [
+          [
+            {
+              "node": "Rapprochement Post-Batch",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Signed URL",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Signed URL": {
+        "main": [
+          [
+            {
+              "node": "Preparer URL",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Preparer Erreur",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparer URL": {
+        "main": [
+          [
+            {
+              "node": "Wait 10s",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extraction OCR Claude": {
+        "main": [
+          [
+            {
+              "node": "Parser et Valider",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Preparer Erreur",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parser et Valider": {
+        "main": [
+          [
+            {
+              "node": "Upsert Entreprise",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Preparer Erreur",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Upsert Entreprise": {
+        "main": [
+          [
+            {
+              "node": "Preparer Document",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Preparer Erreur",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparer Document": {
+        "main": [
+          [
+            {
+              "node": "Offre ou Commande ?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Offre ou Commande ?": {
+        "main": [
+          [
+            {
+              "node": "Inserer Offre",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Inserer Commande",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Inserer Offre": {
+        "main": [
+          [
+            {
+              "node": "Preparer Log Succes",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Inserer Commande": {
+        "main": [
+          [
+            {
+              "node": "Preparer Log Succes",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparer Log Succes": {
+        "main": [
+          [
+            {
+              "node": "Log OCR Succes",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Log OCR Succes": {
+        "main": [
+          [
+            {
+              "node": "Loop Fichiers",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparer Erreur": {
+        "main": [
+          [
+            {
+              "node": "Log OCR Erreur",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Log OCR Erreur": {
+        "main": [
+          [
+            {
+              "node": "Loop Fichiers",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Wait 10s": {
+        "main": [
+          [
+            {
+              "node": "Extraction OCR Claude",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "younes belkharraf",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-04-08T12:05:44.597Z",
+        "id": 333,
+        "workflowId": "9qirw85dYuAVAOkj",
+        "versionId": "ca4b20e4-ce9e-4194-8833-4f82636fe121",
+        "event": "activated",
+        "userId": "2a544a42-b8a8-4d8c-adfa-37180eceb35c"
+      },
+      {
+        "createdAt": "2026-04-08T12:05:44.583Z",
+        "id": 332,
+        "workflowId": "9qirw85dYuAVAOkj",
+        "versionId": "ca4b20e4-ce9e-4194-8833-4f82636fe121",
+        "event": "deactivated",
+        "userId": "2a544a42-b8a8-4d8c-adfa-37180eceb35c"
+      }
+    ]
+  }
+}

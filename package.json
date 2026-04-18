@@ -1,0 +1,16 @@
+{
+  "name": "thermopack-demo",
+  "private": true,
+  "scripts": {
+    "import:sap": "cd app && bun run ../scripts/import-sap-historique.ts",
+    "import:sap:dry-run": "cd app && bun run ../scripts/import-sap-historique.ts --dry-run"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.99.2",
+    "exceljs": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/pdfkit": "^0.17.6",
+    "pdfkit": "^0.18.0"
+  }
+}

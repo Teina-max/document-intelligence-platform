@@ -1,0 +1,343 @@
+{
+  "updatedAt": "2026-04-07T00:06:03.944Z",
+  "createdAt": "2026-03-26T12:46:52.771Z",
+  "id": "BcLFigSGflHzCSww",
+  "name": "ThermoPack - WF-005 Health Check & Monitoring",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "id": "dbae222f-90ed-4df2-87d3-7a40b3ff8915",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        560,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://thermopack-demo.vercel.app",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "71ec32b0-658b-4f6d-a305-9ad3880f41f9",
+      "name": "Ping App",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        784,
+        32
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "818cdf5f-2f5b-4a8c-96f7-df0163ceab61",
+      "name": "Ping Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        784,
+        224
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-app-fail",
+              "leftValue": "={{ $('Ping App').first().json.statusCode }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "check-supabase-fail",
+              "leftValue": "={{ $('Ping Supabase').first().json.statusCode }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "5d4905bd-1556-401f-9dab-e23930364320",
+      "name": "Any Failure?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1008,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "=teinateinauri@gmail.com",
+        "subject": "ThermoPack Industries — Service indisponible",
+        "message": "=Alerte monitoring ThermoPack Industries<br>Date : {{ $now.format('DD/MM/YYYY HH:mm') }}<br><br><b>Statut des services</b><br><br>Application : {{ $('Ping App').first().json.statusCode || 'INDISPONIBLE' }}<br>Base de donnees : {{ $('Ping Supabase').first().json.statusCode || 'INDISPONIBLE' }}<br><br><b>Actions recommandees</b><br>- Verifier https://thermopack-demo.vercel.app<br>- Verifier le dashboard Supabase<br>- Consulter les logs Vercel (onglet Deployments)",
+        "options": {}
+      },
+      "id": "9eaa1057-a7e2-4448-995b-b6881baee264",
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1232,
+        112
+      ],
+      "webhookId": "4072212a-8c70-4beb-98c0-042d22c4fd83",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "otiAvnYuSpANHUFz",
+          "name": "Gmail_teina"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "thermopack/error-log",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "ef09c41c-eaa4-4673-9f25-015b038638f6",
+      "name": "Webhook Error Log",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        560,
+        544
+      ],
+      "webhookId": "thermopack-error-log"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-critical",
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "critical",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4a8da71b-4e86-4686-a86b-eb3c1120fdc7",
+      "name": "Is Critical?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        784,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "=teinateinauri@gmail.com",
+        "subject": "=ThermoPack Industries — Erreur {{ $json.severity }} ({{ $json.source }})",
+        "message": "=Erreur detectee sur ThermoPack Industries<br>Date : {{ $json.created_at }}<br><br><b>Detail de l'erreur</b><br><br>Source : {{ $json.source }}<br>Severite : {{ $json.severity }}<br>Message : {{ $json.message }}<br><br><b>Donnees complementaires</b><br><pre>{{ JSON.stringify($json.details, null, 2) }}</pre><br><b>Actions recommandees</b><br>- Verifier les logs de l'application<br>- Consulter la table error_logs dans Supabase",
+        "options": {}
+      },
+      "id": "b3b9fc06-b9cd-462b-916a-d7836a6d302d",
+      "name": "Send Error Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1008,
+        448
+      ],
+      "webhookId": "48e4da25-406b-4967-977a-10fc4704b624",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "otiAvnYuSpANHUFz",
+          "name": "Gmail_teina"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "a86846f7-f1dc-447d-8d09-3e56d35df920",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1008,
+        640
+      ]
+    }
+  ],
+  "connections": {
+    "Every Hour": {
+      "main": [
+        [
+          {
+            "node": "Ping App",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Ping Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ping App": {
+      "main": [
+        [
+          {
+            "node": "Any Failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ping Supabase": {
+      "main": [
+        [
+          {
+            "node": "Any Failure?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Failure?": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Error Log": {
+      "main": [
+        [
+          {
+            "node": "Is Critical?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Critical?": {
+      "main": [
+        [
+          {
+            "node": "Send Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "staticData": {
+    "node:Every Hour": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": {},
+  "versionId": "4f32fd7b-10b0-4561-a624-4593d8658509",
+  "activeVersionId": null,
+  "versionCounter": 3,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-03-26T12:46:52.774Z",
+      "createdAt": "2026-03-26T12:46:52.774Z",
+      "role": "workflow:owner",
+      "workflowId": "BcLFigSGflHzCSww",
+      "projectId": "O7LZ54FANArycjaL",
+      "project": {
+        "updatedAt": "2026-03-26T11:55:34.833Z",
+        "createdAt": "2026-03-26T11:50:47.448Z",
+        "id": "O7LZ54FANArycjaL",
+        "name": "younes belkharraf <younes@ladinguerie.fr>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "2a544a42-b8a8-4d8c-adfa-37180eceb35c"
+      }
+    }
+  ],
+  "tags": [
+    {
+      "updatedAt": "2026-03-27T15:26:49.817Z",
+      "createdAt": "2026-03-27T15:26:49.817Z",
+      "id": "8HJoqYeLRVz7Wjfc",
+      "name": "ThermoPack"
+    }
+  ],
+  "activeVersion": null
+}

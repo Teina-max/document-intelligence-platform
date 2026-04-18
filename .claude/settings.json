@@ -1,0 +1,28 @@
+{
+  "outputStyle": "Jean-Claude",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/teina/jean-claude-v2/scripts/security-check-pre-commit.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/teina/jean-claude-v2/scripts/auto-commit.sh",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

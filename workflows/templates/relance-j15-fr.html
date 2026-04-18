@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offre {{reference_offre}} — Suivi</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#003B73;padding:24px 32px;text-align:center;">
+              <img src="https://res.cloudinary.com/dttleawx6/image/upload/v1774510122/copy_of_capture_d_cran_2026-03-25_131424-removebg-preview_eu6n9g_11f077.png" alt="ThermoPack" width="180" style="display:block;margin:0 auto;filter:brightness(0) invert(1);">
+            </td>
+          </tr>
+          <!-- Badge palier -->
+          <tr>
+            <td style="padding:24px 32px 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background-color:#FEF3C7;color:#92400E;font-size:12px;font-weight:700;padding:4px 12px;border-radius:12px;letter-spacing:0.5px;">
+                    OFFRE EN COURS &mdash; J-15
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:20px 32px 0;">
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#1a1a1a;">Bonjour {{nom_contact}},</p>
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#333333;">
+                Nous revenons vers vous au sujet de notre offre ci-dessous, valable jusqu'au <strong>{{date_expiration}}</strong>.
+              </p>
+            </td>
+          </tr>
+          <!-- Encart offre -->
+          <tr>
+            <td style="padding:8px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F8FAFC;border-left:4px solid #D97706;border-radius:4px;">
+                <tr>
+                  <td style="padding:16px 20px;">
+                    <p style="margin:0 0 6px;font-size:13px;color:#666;">R&eacute;f&eacute;rence offre</p>
+                    <p style="margin:0 0 14px;font-size:16px;font-weight:700;color:#003B73;">{{reference_offre}}</p>
+                    <p style="margin:0 0 6px;font-size:13px;color:#666;">Montant HT</p>
+                    <p style="margin:0 0 14px;font-size:16px;font-weight:700;color:#1a1a1a;">{{montant_ht}} &euro; HT</p>
+                    <p style="margin:0 0 6px;font-size:13px;color:#666;">Valable jusqu'au</p>
+                    <p style="margin:0;font-size:16px;font-weight:700;color:#D97706;">{{date_expiration}}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Suite texte -->
+          <tr>
+            <td style="padding:16px 32px 0;">
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#333333;">
+                Avez-vous eu l'occasion d'&eacute;tudier cette proposition ? Nous serions ravis d'&eacute;changer par t&eacute;l&eacute;phone pour r&eacute;pondre &agrave; vos &eacute;ventuelles questions ou adapter notre offre &agrave; vos besoins.
+              </p>
+            </td>
+          </tr>
+          <!-- CTA -->
+          <tr>
+            <td style="padding:16px 32px 24px;" align="center">
+              <a href="tel:+33160861025" style="display:inline-block;background-color:#003B73;color:#ffffff;font-size:14px;font-weight:600;padding:12px 28px;border-radius:6px;text-decoration:none;margin-right:8px;">
+                &#9742; Nous appeler
+              </a>
+              <a href="mailto:{{expediteur_email}}?subject=Re:%20Offre%20{{reference_offre}}" style="display:inline-block;background-color:#ffffff;color:#003B73;font-size:14px;font-weight:600;padding:11px 28px;border-radius:6px;text-decoration:none;border:1px solid #003B73;">
+                R&eacute;pondre par email
+              </a>
+            </td>
+          </tr>
+          <!-- Signature -->
+          <tr>
+            <td style="padding:0 32px 24px;border-top:1px solid #e5e7eb;">
+              <p style="margin:20px 0 4px;font-size:14px;font-weight:700;color:#1a1a1a;">{{expediteur_nom}}</p>
+              <p style="margin:0 0 12px;font-size:13px;color:#666;font-style:italic;">{{expediteur_titre}}</p>
+              <p style="margin:0;font-size:13px;line-height:1.6;color:#666;">
+                ThermoPack Industries<br>
+                5, rue L&eacute;on Appert<br>
+                91280 Saint-Pierre-du-Perray &mdash; France<br>
+                T&eacute;l. : {{tel}}
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#F8FAFC;padding:16px 32px;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#999;">
+                Ce message est envoy&eacute; automatiquement suite &agrave; votre demande de devis. Si vous ne souhaitez plus recevoir ces rappels, merci de nous le signaler par retour de mail.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

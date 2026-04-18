@@ -1,0 +1,809 @@
+{
+  "updatedAt": "2026-04-08T11:39:14.754Z",
+  "createdAt": "2026-03-26T12:46:52.215Z",
+  "id": "UAXmyEfujZyW9Eik",
+  "name": "ThermoPack - WF-002 Rapprochement Offre-Commande",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "46c800c4-5472-4697-a076-0887bbab5e6d",
+      "name": "CRON Quotidien 7h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -976,
+        912
+      ],
+      "notes": "Rapprochement batch quotidien a 7h. Rattrape les rapprochements manques."
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "thermopack/rapprochement",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "32976051-a2d2-47e5-a2c0-fe70f1761624",
+      "name": "Webhook Post-Ingestion",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -976,
+        1104
+      ],
+      "webhookId": "thermopack-rapprochement",
+      "notes": "Appele apres ingestion d'une commande (WF-001 ou manuellement).\nPeut recevoir { reference_offre } pour cibler une offre specifique."
+    },
+    {
+      "id": "3d31b183-a0d7-4941-9946-00b2b4318d78",
+      "name": "Offres en Attente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -752,
+        912
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/offres?select=id,reference_offre,montant_ht,statut,entreprise_id&statut=eq.en_attente&limit=1000",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      }
+    },
+    {
+      "id": "63b44d17-0231-4ec7-ae88-4df9ddbfed5c",
+      "name": "Commandes avec Offre",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -752,
+        1104
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/commandes?select=id,offre_id,reference_commande,reference_offre,montant_ht&reference_offre=not.is.null&limit=5000",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "options": {}
+      },
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rapprochement offres/commandes\n// - Lie les commandes aux offres par reference_offre\n// - Calcule le taux de transformation par offre\n// - Seuil 1% pour classification\n// - Statut offre = transformee dans tous les cas\n// - Type commande = egale/partielle/superieure\n\nconst offres = $('Offres en Attente').all().map(i => i.json);\nconst commandes = $('Commandes avec Offre').all().map(i => i.json);\n\nconst results = [];\n\nfor (const offre of offres) {\n  const ref = offre.reference_offre;\n  if (!ref) continue;\n\n  // Trouver les commandes liees a cette offre\n  const cmdsLiees = commandes.filter(c =>\n    c.offre_id === offre.id ||\n    (c.reference_commande && c.reference_offre === ref)\n  );\n\n  // Calculer le total des commandes\n  let totalCommandes = 0;\n  const cmdIds = [];\n  for (const cmd of cmdsLiees) {\n    totalCommandes += parseFloat(cmd.montant_ht) || 0;\n    cmdIds.push(cmd.id);\n  }\n\n  const montantOffre = parseFloat(offre.montant_ht) || 0;\n  const ancienStatut = offre.statut;\n\n  // Classification — seuil 1%\n  let typeRapprochement = 'non_transformee';\n  let nouveauStatut = offre.statut;\n\n  if (cmdsLiees.length > 0 && totalCommandes > 0) {\n    const ratio = totalCommandes / montantOffre;\n    if (ratio < 0.99) {\n      typeRapprochement = 'partielle';\n    } else if (ratio > 1.01) {\n      typeRapprochement = 'superieure';\n    } else {\n      typeRapprochement = 'egale';\n    }\n    // Statut offre = transformee dans tous les cas\n    nouveauStatut = 'transformee';\n  }\n\n  if (nouveauStatut === ancienStatut && typeRapprochement === 'non_transformee') continue;\n\n  results.push({\n    json: {\n      offre_id: offre.id,\n      reference_offre: ref,\n      montant_offre: montantOffre,\n      total_commandes: totalCommandes,\n      nb_commandes: cmdsLiees.length,\n      type_rapprochement: typeRapprochement,\n      ancien_statut: ancienStatut,\n      nouveau_statut: nouveauStatut,\n      ecart: Math.round((totalCommandes - montantOffre) * 100) / 100,\n      taux_transformation: montantOffre > 0 ? Math.round((totalCommandes / montantOffre) * 100) : 0,\n      cmd_ids: cmdIds\n    }\n  });\n}\n\nif (results.length === 0) {\n  return [{ json: { _no_changes: true } }];\n}\n\nreturn results;"
+      },
+      "id": "02c85802-a77d-4990-99ff-ebd20212ce54",
+      "name": "Calculer Rapprochements",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        1008
+      ],
+      "notes": "Compare chaque offre avec ses commandes liees.\nClassifie: egale (±1%), partielle (<99%), superieure (>101%).\nStatut offre = transformee dans tous les cas."
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "7fd3530a-3b1a-4078-ba95-7ee92edec356",
+      "name": "Merge Offres + Commandes",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -528,
+        1008
+      ],
+      "notes": "Attend que les deux requetes (offres + commandes) soient terminees avant de lancer le calcul."
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 2,
+        "output": "={{ $json._no_changes ? 1 : 0 }}"
+      },
+      "id": "2861058a-15ed-4cad-9426-cf6102a7c8db",
+      "name": "Changements ?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -80,
+        1008
+      ],
+      "notes": "Switch v3 expression. Output 0 = rapprochements a traiter, Output 1 = rien a faire."
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/offres?id=eq.{{ $json.offre_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ statut: $json.nouveau_statut }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "2a370745-84f7-4a48-bf42-8c2a74829ffa",
+      "name": "MAJ Statut Offre",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        144,
+        912
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "notes": "PATCH offres.statut via PostgREST. Le Supabase node v1 ne gere pas les updates filtres (WHERE clause manquante)."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/rapprochements_log",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ offre_id: $('Calculer Rapprochements').item.json.offre_id, reference_offre: $('Calculer Rapprochements').item.json.reference_offre, montant_offre: $('Calculer Rapprochements').item.json.montant_offre, total_commandes: $('Calculer Rapprochements').item.json.total_commandes, nb_commandes: $('Calculer Rapprochements').item.json.nb_commandes, type_rapprochement: $('Calculer Rapprochements').item.json.type_rapprochement, ancien_statut: $('Calculer Rapprochements').item.json.ancien_statut, nouveau_statut: $('Calculer Rapprochements').item.json.nouveau_statut, ecart: $('Calculer Rapprochements').item.json.ecart, taux_transformation: $('Calculer Rapprochements').item.json.taux_transformation }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "f362bfae-aeae-499f-9627-36744005ddd1",
+      "name": "Log Rapprochement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        368,
+        912
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "notes": "POST rapprochements_log via PostgREST. Referencecement direct de Calculer Rapprochements pour eviter la perte de donnees via MAJ Statut Offre (return=minimal)."
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/commandes?id=in.({{ $json.cmd_ids.join(',') }})",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ offre_id: $json.offre_id, type: $json.type_rapprochement }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "9c93c48e-05a6-4c06-a29b-365cdd62fbac",
+      "name": "Lier Commandes a Offre",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        144,
+        1104
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "notes": "PATCH commandes.offre_id pour toutes les commandes liees a cette offre.\nUtilise PostgREST directement car le Supabase node v1 ne gere pas les updates filtres par IN()."
+    }
+  ],
+  "connections": {
+    "CRON Quotidien 7h": {
+      "main": [
+        [
+          {
+            "node": "Offres en Attente",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Commandes avec Offre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Post-Ingestion": {
+      "main": [
+        [
+          {
+            "node": "Offres en Attente",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Commandes avec Offre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offres en Attente": {
+      "main": [
+        [
+          {
+            "node": "Merge Offres + Commandes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Commandes avec Offre": {
+      "main": [
+        [
+          {
+            "node": "Merge Offres + Commandes",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Offres + Commandes": {
+      "main": [
+        [
+          {
+            "node": "Calculer Rapprochements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculer Rapprochements": {
+      "main": [
+        [
+          {
+            "node": "Changements ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Changements ?": {
+      "main": [
+        [
+          {
+            "node": "MAJ Statut Offre",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lier Commandes a Offre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MAJ Statut Offre": {
+      "main": [
+        [
+          {
+            "node": "Log Rapprochement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "binaryMode": "separate"
+  },
+  "staticData": {
+    "node:CRON Quotidien 7h": {
+      "recurrenceRules": []
+    }
+  },
+  "meta": null,
+  "pinData": {},
+  "versionId": "fe7b5659-f313-4df4-b3d0-9fdceb390adf",
+  "activeVersionId": "fe7b5659-f313-4df4-b3d0-9fdceb390adf",
+  "versionCounter": 31,
+  "triggerCount": 2,
+  "shared": [
+    {
+      "updatedAt": "2026-03-26T12:46:52.217Z",
+      "createdAt": "2026-03-26T12:46:52.217Z",
+      "role": "workflow:owner",
+      "workflowId": "UAXmyEfujZyW9Eik",
+      "projectId": "O7LZ54FANArycjaL",
+      "project": {
+        "updatedAt": "2026-03-26T11:55:34.833Z",
+        "createdAt": "2026-03-26T11:50:47.448Z",
+        "id": "O7LZ54FANArycjaL",
+        "name": "younes belkharraf <younes@ladinguerie.fr>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "2a544a42-b8a8-4d8c-adfa-37180eceb35c"
+      }
+    }
+  ],
+  "tags": [
+    {
+      "updatedAt": "2026-03-27T15:26:49.817Z",
+      "createdAt": "2026-03-27T15:26:49.817Z",
+      "id": "8HJoqYeLRVz7Wjfc",
+      "name": "ThermoPack"
+    }
+  ],
+  "activeVersion": {
+    "updatedAt": "2026-04-08T11:39:14.757Z",
+    "createdAt": "2026-04-08T11:39:14.757Z",
+    "versionId": "fe7b5659-f313-4df4-b3d0-9fdceb390adf",
+    "workflowId": "UAXmyEfujZyW9Eik",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 7 * * *"
+              }
+            ]
+          }
+        },
+        "id": "46c800c4-5472-4697-a076-0887bbab5e6d",
+        "name": "CRON Quotidien 7h",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -976,
+          912
+        ],
+        "notes": "Rapprochement batch quotidien a 7h. Rattrape les rapprochements manques."
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "thermopack/rapprochement",
+          "responseMode": "lastNode",
+          "options": {}
+        },
+        "id": "32976051-a2d2-47e5-a2c0-fe70f1761624",
+        "name": "Webhook Post-Ingestion",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          -976,
+          1104
+        ],
+        "webhookId": "thermopack-rapprochement",
+        "notes": "Appele apres ingestion d'une commande (WF-001 ou manuellement).\nPeut recevoir { reference_offre } pour cibler une offre specifique."
+      },
+      {
+        "id": "3d31b183-a0d7-4941-9946-00b2b4318d78",
+        "name": "Offres en Attente",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -752,
+          912
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/offres?select=id,reference_offre,montant_ht,statut,entreprise_id&statut=eq.en_attente&limit=1000",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "supabaseApi",
+          "options": {}
+        },
+        "credentials": {
+          "supabaseApi": {
+            "id": "{ANON_SUPABASE_CRED_ID}",
+            "name": "Supabase-ThermoPack"
+          }
+        }
+      },
+      {
+        "id": "63b44d17-0231-4ec7-ae88-4df9ddbfed5c",
+        "name": "Commandes avec Offre",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          -752,
+          1104
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/commandes?select=id,offre_id,reference_commande,reference_offre,montant_ht&reference_offre=not.is.null&limit=5000",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "supabaseApi",
+          "options": {}
+        },
+        "credentials": {
+          "supabaseApi": {
+            "id": "{ANON_SUPABASE_CRED_ID}",
+            "name": "Supabase-ThermoPack"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// Rapprochement offres/commandes\n// - Lie les commandes aux offres par reference_offre\n// - Calcule le taux de transformation par offre\n// - Seuil 1% pour classification\n// - Statut offre = transformee dans tous les cas\n// - Type commande = egale/partielle/superieure\n\nconst offres = $('Offres en Attente').all().map(i => i.json);\nconst commandes = $('Commandes avec Offre').all().map(i => i.json);\n\nconst results = [];\n\nfor (const offre of offres) {\n  const ref = offre.reference_offre;\n  if (!ref) continue;\n\n  // Trouver les commandes liees a cette offre\n  const cmdsLiees = commandes.filter(c =>\n    c.offre_id === offre.id ||\n    (c.reference_commande && c.reference_offre === ref)\n  );\n\n  // Calculer le total des commandes\n  let totalCommandes = 0;\n  const cmdIds = [];\n  for (const cmd of cmdsLiees) {\n    totalCommandes += parseFloat(cmd.montant_ht) || 0;\n    cmdIds.push(cmd.id);\n  }\n\n  const montantOffre = parseFloat(offre.montant_ht) || 0;\n  const ancienStatut = offre.statut;\n\n  // Classification — seuil 1%\n  let typeRapprochement = 'non_transformee';\n  let nouveauStatut = offre.statut;\n\n  if (cmdsLiees.length > 0 && totalCommandes > 0) {\n    const ratio = totalCommandes / montantOffre;\n    if (ratio < 0.99) {\n      typeRapprochement = 'partielle';\n    } else if (ratio > 1.01) {\n      typeRapprochement = 'superieure';\n    } else {\n      typeRapprochement = 'egale';\n    }\n    // Statut offre = transformee dans tous les cas\n    nouveauStatut = 'transformee';\n  }\n\n  if (nouveauStatut === ancienStatut && typeRapprochement === 'non_transformee') continue;\n\n  results.push({\n    json: {\n      offre_id: offre.id,\n      reference_offre: ref,\n      montant_offre: montantOffre,\n      total_commandes: totalCommandes,\n      nb_commandes: cmdsLiees.length,\n      type_rapprochement: typeRapprochement,\n      ancien_statut: ancienStatut,\n      nouveau_statut: nouveauStatut,\n      ecart: Math.round((totalCommandes - montantOffre) * 100) / 100,\n      taux_transformation: montantOffre > 0 ? Math.round((totalCommandes / montantOffre) * 100) : 0,\n      cmd_ids: cmdIds\n    }\n  });\n}\n\nif (results.length === 0) {\n  return [{ json: { _no_changes: true } }];\n}\n\nreturn results;"
+        },
+        "id": "02c85802-a77d-4990-99ff-ebd20212ce54",
+        "name": "Calculer Rapprochements",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -304,
+          1008
+        ],
+        "notes": "Compare chaque offre avec ses commandes liees.\nClassifie: egale (±1%), partielle (<99%), superieure (>101%).\nStatut offre = transformee dans tous les cas."
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "id": "7fd3530a-3b1a-4078-ba95-7ee92edec356",
+        "name": "Merge Offres + Commandes",
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3,
+        "position": [
+          -528,
+          1008
+        ],
+        "notes": "Attend que les deux requetes (offres + commandes) soient terminees avant de lancer le calcul."
+      },
+      {
+        "parameters": {
+          "mode": "expression",
+          "numberOutputs": 2,
+          "output": "={{ $json._no_changes ? 1 : 0 }}"
+        },
+        "id": "2861058a-15ed-4cad-9426-cf6102a7c8db",
+        "name": "Changements ?",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3,
+        "position": [
+          -80,
+          1008
+        ],
+        "notes": "Switch v3 expression. Output 0 = rapprochements a traiter, Output 1 = rien a faire."
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/offres?id=eq.{{ $json.offre_id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "supabaseApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=minimal"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ statut: $json.nouveau_statut }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "id": "2a370745-84f7-4a48-bf42-8c2a74829ffa",
+        "name": "MAJ Statut Offre",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          144,
+          912
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "{ANON_SUPABASE_CRED_ID}",
+            "name": "Supabase-ThermoPack"
+          }
+        },
+        "notes": "PATCH offres.statut via PostgREST. Le Supabase node v1 ne gere pas les updates filtres (WHERE clause manquante)."
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/rapprochements_log",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "supabaseApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=minimal"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ offre_id: $('Calculer Rapprochements').item.json.offre_id, reference_offre: $('Calculer Rapprochements').item.json.reference_offre, montant_offre: $('Calculer Rapprochements').item.json.montant_offre, total_commandes: $('Calculer Rapprochements').item.json.total_commandes, nb_commandes: $('Calculer Rapprochements').item.json.nb_commandes, type_rapprochement: $('Calculer Rapprochements').item.json.type_rapprochement, ancien_statut: $('Calculer Rapprochements').item.json.ancien_statut, nouveau_statut: $('Calculer Rapprochements').item.json.nouveau_statut, ecart: $('Calculer Rapprochements').item.json.ecart, taux_transformation: $('Calculer Rapprochements').item.json.taux_transformation }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "id": "f362bfae-aeae-499f-9627-36744005ddd1",
+        "name": "Log Rapprochement",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          368,
+          912
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "{ANON_SUPABASE_CRED_ID}",
+            "name": "Supabase-ThermoPack"
+          }
+        },
+        "notes": "POST rapprochements_log via PostgREST. Referencecement direct de Calculer Rapprochements pour eviter la perte de donnees via MAJ Statut Offre (return=minimal)."
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/commandes?id=in.({{ $json.cmd_ids.join(',') }})",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "supabaseApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=minimal"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ offre_id: $json.offre_id, type: $json.type_rapprochement }) }}",
+          "options": {
+            "timeout": 10000
+          }
+        },
+        "id": "9c93c48e-05a6-4c06-a29b-365cdd62fbac",
+        "name": "Lier Commandes a Offre",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          144,
+          1104
+        ],
+        "credentials": {
+          "supabaseApi": {
+            "id": "{ANON_SUPABASE_CRED_ID}",
+            "name": "Supabase-ThermoPack"
+          }
+        },
+        "notes": "PATCH commandes.offre_id pour toutes les commandes liees a cette offre.\nUtilise PostgREST directement car le Supabase node v1 ne gere pas les updates filtres par IN()."
+      }
+    ],
+    "connections": {
+      "CRON Quotidien 7h": {
+        "main": [
+          [
+            {
+              "node": "Offres en Attente",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Commandes avec Offre",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook Post-Ingestion": {
+        "main": [
+          [
+            {
+              "node": "Offres en Attente",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Commandes avec Offre",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Offres en Attente": {
+        "main": [
+          [
+            {
+              "node": "Merge Offres + Commandes",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Commandes avec Offre": {
+        "main": [
+          [
+            {
+              "node": "Merge Offres + Commandes",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Merge Offres + Commandes": {
+        "main": [
+          [
+            {
+              "node": "Calculer Rapprochements",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Calculer Rapprochements": {
+        "main": [
+          [
+            {
+              "node": "Changements ?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Changements ?": {
+        "main": [
+          [
+            {
+              "node": "MAJ Statut Offre",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Lier Commandes a Offre",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "MAJ Statut Offre": {
+        "main": [
+          [
+            {
+              "node": "Log Rapprochement",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "younes belkharraf",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-04-08T11:39:14.891Z",
+        "id": 329,
+        "workflowId": "UAXmyEfujZyW9Eik",
+        "versionId": "fe7b5659-f313-4df4-b3d0-9fdceb390adf",
+        "event": "activated",
+        "userId": "2a544a42-b8a8-4d8c-adfa-37180eceb35c"
+      },
+      {
+        "createdAt": "2026-04-08T11:39:14.867Z",
+        "id": 328,
+        "workflowId": "UAXmyEfujZyW9Eik",
+        "versionId": "fe7b5659-f313-4df4-b3d0-9fdceb390adf",
+        "event": "deactivated",
+        "userId": "2a544a42-b8a8-4d8c-adfa-37180eceb35c"
+      }
+    ]
+  }
+}
