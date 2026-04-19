@@ -332,7 +332,7 @@ Puis utiliser `href={buildToggleUrl({ tri_clients: "ca" })}` et `href={buildTogg
 
 - [ ] **Step 4: Vérifier le build**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && bun run build`
+Run: `cd ~/projects/thermopack-demo/app && bun run build`
 Expected: Build success, no type errors
 
 - [ ] **Step 5: Commit**
@@ -541,7 +541,7 @@ export function LinkOffreDialog({
 
 - [ ] **Step 2: Vérifier le build (pas encore intégré, juste le composant)**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && npx tsc --noEmit`
+Run: `cd ~/projects/thermopack-demo/app && npx tsc --noEmit`
 Expected: No type errors
 
 - [ ] **Step 3: Commit**
@@ -708,7 +708,7 @@ Just before the closing `</div>` of the return (~line 203), add:
 
 - [ ] **Step 5: Vérifier le build**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && bun run build`
+Run: `cd ~/projects/thermopack-demo/app && bun run build`
 Expected: Build success
 
 - [ ] **Step 6: Commit**
@@ -963,7 +963,7 @@ Spécifiquement, dans les `subjects` (~line 28), si le J-1 FR dit "Dernière rel
 
 - [ ] **Step 2: Vérifier le build**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && bun run build`
+Run: `cd ~/projects/thermopack-demo/app && bun run build`
 Expected: Build success
 
 - [ ] **Step 3: Commit**
@@ -982,12 +982,12 @@ git commit -m "rename derniere relance to relance classique in email templates"
 
 - [ ] **Step 1: Build complet**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && bun run build`
+Run: `cd ~/projects/thermopack-demo/app && bun run build`
 Expected: Build success, 0 errors
 
 - [ ] **Step 2: Tester manuellement sur localhost**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && bun run dev`
+Run: `cd ~/projects/thermopack-demo/app && bun run dev`
 
 Vérifier :
 1. Dashboard → Top clients : toggle "Par CA" / "Par taux" fonctionne, colonne CA Commandes visible

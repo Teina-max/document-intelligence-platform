@@ -73,7 +73,7 @@ ALTER TABLE commandes ADD COLUMN IF NOT EXISTS statut_livraison TEXT;
 COMMENT ON COLUMN commandes.source_import IS 'ocr | sap_export | manual';
 COMMENT ON COLUMN commandes.statut_livraison IS 'liquide | non_livre | partiellement_livre (from SAP)';
 
--- SAP creator (MARAVAL, DUBOIS, etc.)
+-- SAP creator (DURAND, DUBOIS, etc.)
 ALTER TABLE offres ADD COLUMN IF NOT EXISTS sap_created_by TEXT;
 ALTER TABLE commandes ADD COLUMN IF NOT EXISTS sap_created_by TEXT;
 

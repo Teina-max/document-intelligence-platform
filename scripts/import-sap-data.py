@@ -19,7 +19,7 @@ import openpyxl
 # Config
 # ---------------------------------------------------------------------------
 
-PROJECT_ROOT = Path("/home/teina/projects/thermopack-demo")
+PROJECT_ROOT = Path("~/projects/thermopack-demo")
 TODAY = date.today().isoformat()
 NOW = datetime.now(timezone.utc).isoformat()
 

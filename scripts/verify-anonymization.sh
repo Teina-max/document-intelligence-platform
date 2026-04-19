@@ -33,8 +33,13 @@ EXEMPT_PATHSPEC=(
 check_regex() {
   local label="$1"
   local pattern="$2"
+  local flags="${3:-}"
   local matches
-  matches=$(git grep -InE "$pattern" -- "${EXEMPT_PATHSPEC[@]}" 2>/dev/null || true)
+  if [ "$flags" = "i" ]; then
+    matches=$(git grep -InEi "$pattern" -- "${EXEMPT_PATHSPEC[@]}" 2>/dev/null || true)
+  else
+    matches=$(git grep -InE "$pattern" -- "${EXEMPT_PATHSPEC[@]}" 2>/dev/null || true)
+  fi
   if [ -n "$matches" ]; then
     echo -e "${RED}LEAK (${label})${NC}"
     echo "$matches" | head -20
@@ -77,11 +82,13 @@ check_regex "LDG partner"               '\bLDG\b'
 check_regex "ldg-automation domain"     'ldg-automation'
 
 # 2. Persons
-check_regex "Maraval surname"           '\bMaraval\b'
-check_regex "Alicia firstname"          '\bAlicia\b'
-check_regex "Geraldine firstname"       '\bG[eé]raldine\b'
-check_regex "Younes firstname"          '\bYounes\b'
-check_regex "Balla firstname"           '\bBalla\b'
+check_regex "Maraval surname"           '\bMaraval\b' i
+check_regex "Alicia firstname"          '\bAlicia\b' i
+check_regex "Geraldine firstname"       '\bG[eé]raldine\b' i
+check_regex "Younes firstname"          '\bYounes\b' i
+check_regex "Balla firstname"           '\bBalla\b' i
+check_regex "Host /home/username path"  '/home/[a-z][a-z0-9_-]+'
+check_regex "thermopack .fr (should be .example)" 'thermopack\.fr'
 
 # 3. Supabase prod ref
 check_regex "Supabase prod ref"         'vgddvvulobqwstqeqsfs'

@@ -82,7 +82,7 @@
       "credentials": {
         "httpHeaderAuth": {
           "id": "8dC7ey5lrIGxTn4U",
-          "name": "Supabase-Storage-Illig"
+          "name": "Supabase-Storage-ThermoPack"
         }
       },
       "onError": "continueErrorOutput"
@@ -678,7 +678,7 @@
         "updatedAt": "2026-03-26T11:55:34.833Z",
         "createdAt": "2026-03-26T11:50:47.448Z",
         "id": "O7LZ54FANArycjaL",
-        "name": "younes belkharraf <younes@ladinguerie.fr>",
+        "name": "ThermoPack Demo <demo@thermopack.example>",
         "type": "personal",
         "icon": null,
         "description": null,
@@ -775,7 +775,7 @@
         "credentials": {
           "httpHeaderAuth": {
             "id": "8dC7ey5lrIGxTn4U",
-            "name": "Supabase-Storage-Illig"
+            "name": "Supabase-Storage-ThermoPack"
           }
         },
         "onError": "continueErrorOutput"
@@ -1346,7 +1346,7 @@
         ]
       }
     },
-    "authors": "younes belkharraf",
+    "authors": "ThermoPack Demo",
     "name": null,
     "description": null,
     "autosaved": false,

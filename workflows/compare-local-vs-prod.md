@@ -1,7 +1,7 @@
 # ThermoPack Industries — Local vs Prod n8n Workflows
 
 **Generated**: 2026-03-28
-**Source**: Local workflows in `/home/teina/projects/thermopack-demo/workflows/` vs n8n-prod-cli API
+**Source**: Local workflows in `~/projects/thermopack-demo/workflows/` vs n8n-prod-cli API
 
 ## Summary Table
 

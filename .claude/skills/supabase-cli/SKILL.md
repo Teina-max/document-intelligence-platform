@@ -22,7 +22,7 @@ All commands use the project ref from `.env`:
 supabase login --token "$SUPABASE_ACCESS_TOKEN"
 
 # Link this project directory
-cd /home/teina/projects/thermopack-demo
+cd ~/projects/thermopack-demo
 supabase link --project-ref "$SUPABASE_PROJECT_ID"
 ```
 
@@ -168,7 +168,7 @@ supabase gen types typescript --project-id "$SUPABASE_PROJECT_ID" > types/supaba
 
 ## Environment Variables
 
-All secrets are in `/home/teina/projects/thermopack-demo/.env`:
+All secrets are in `~/projects/thermopack-demo/.env`:
 
 | Variable | Purpose |
 |----------|---------|
@@ -182,5 +182,5 @@ All secrets are in `/home/teina/projects/thermopack-demo/.env`:
 ### Loading env vars in shell
 
 ```bash
-source /home/teina/projects/thermopack-demo/.env 2>/dev/null || export $(grep -v '^#' /home/teina/projects/thermopack-demo/.env | xargs)
+source ~/projects/thermopack-demo/.env 2>/dev/null || export $(grep -v '^#' ~/projects/thermopack-demo/.env | xargs)
 ```

@@ -123,7 +123,7 @@ export function Pagination({ currentPage, totalPages, totalCount, stats }: Pagin
 
 - [ ] **Step 2: Verify the component builds**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && npx next build 2>&1 | head -30`
+Run: `cd ~/projects/thermopack-demo/app && npx next build 2>&1 | head -30`
 Expected: Build succeeds (component not yet imported anywhere)
 
 - [ ] **Step 3: Commit**
@@ -345,7 +345,7 @@ import { SortableHeader } from "@/components/sortable-header";
 
 - [ ] **Step 7: Verify build**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
+Run: `cd ~/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
 Expected: Build succeeds
 
 - [ ] **Step 8: Commit**
@@ -402,7 +402,7 @@ import { SortableHeader } from "@/components/sortable-header";
 
 - [ ] **Step 5: Verify build**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
+Run: `cd ~/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
 Expected: Build succeeds
 
 - [ ] **Step 6: Commit**
@@ -498,7 +498,7 @@ const INITIAL_LIMIT = 5;
 
 - [ ] **Step 5: Verify build**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
+Run: `cd ~/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
 Expected: Build succeeds
 
 - [ ] **Step 6: Commit**
@@ -728,7 +728,7 @@ Note: `isAdmin` needs to be passed as a prop from the page. Add it to OffresTabl
 
 - [ ] **Step 5: Verify build**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
+Run: `cd ~/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
 Expected: Build succeeds
 
 - [ ] **Step 6: Commit**
@@ -750,7 +750,7 @@ git commit -m "add selection checkboxes and batch actions to offres table"
 
 - [ ] **Step 1: Find the globals.css file path**
 
-Run: `find /home/teina/projects/thermopack-demo/app/src -name "globals.css" -type f`
+Run: `find ~/projects/thermopack-demo/app/src -name "globals.css" -type f`
 
 - [ ] **Step 2: Add pulsing animation to globals.css**
 
@@ -851,7 +851,7 @@ In `offres/page.tsx`, above the DataFilters, add a toggle button:
 
 - [ ] **Step 6: Verify build**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
+Run: `cd ~/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
 Expected: Build succeeds
 
 - [ ] **Step 7: Commit**
@@ -900,7 +900,7 @@ In the nav items map, after the `SidebarMenuButton` for "Offres" (where `item.hr
 
 - [ ] **Step 3: Verify build**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
+Run: `cd ~/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
 Expected: Build succeeds
 
 - [ ] **Step 4: Commit**
@@ -1083,13 +1083,13 @@ main().catch(console.error);
 
 - [ ] **Step 2: Test with dry run (check count)**
 
-Run: `cd /home/teina/projects/thermopack-demo && NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY bun run -e "const {createClient}=require('@supabase/supabase-js');const s=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY);(async()=>{const {count:c1}=await s.from('offre_lignes').select('id',{count:'exact',head:true}).is('designation_fr',null).not('designation_brute','is',null);const {count:c2}=await s.from('commande_lignes').select('id',{count:'exact',head:true}).is('designation_fr',null).not('designation_brute','is',null);console.log('offre_lignes:',c1,'commande_lignes:',c2)})()"`
+Run: `cd ~/projects/thermopack-demo && NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY bun run -e "const {createClient}=require('@supabase/supabase-js');const s=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY);(async()=>{const {count:c1}=await s.from('offre_lignes').select('id',{count:'exact',head:true}).is('designation_fr',null).not('designation_brute','is',null);const {count:c2}=await s.from('commande_lignes').select('id',{count:'exact',head:true}).is('designation_fr',null).not('designation_brute','is',null);console.log('offre_lignes:',c1,'commande_lignes:',c2)})()"`
 
 Verify counts are reasonable before running full script.
 
 - [ ] **Step 3: Run backfill script**
 
-Run: `cd /home/teina/projects/thermopack-demo && bun run scripts/translate-designations.ts`
+Run: `cd ~/projects/thermopack-demo && bun run scripts/translate-designations.ts`
 
 This will take time (~2s per batch of 50). Monitor progress.
 
@@ -1152,7 +1152,7 @@ git commit -m "add designation translation backfill script"
 
 - [ ] **Step 1: Initialize Supabase functions directory if needed**
 
-Run: `ls /home/teina/projects/thermopack-demo/supabase/functions/ 2>/dev/null || mkdir -p /home/teina/projects/thermopack-demo/supabase/functions/translate-designation`
+Run: `ls ~/projects/thermopack-demo/supabase/functions/ 2>/dev/null || mkdir -p ~/projects/thermopack-demo/supabase/functions/translate-designation`
 
 - [ ] **Step 2: Create the Edge Function**
 
@@ -1291,7 +1291,7 @@ This shows `designation_fr` by default with the original as a tooltip when they 
 
 - [ ] **Step 3: Verify build**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
+Run: `cd ~/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
 Expected: Build succeeds
 
 - [ ] **Step 4: Commit**
@@ -1322,13 +1322,13 @@ Read the dashboard page section that renders geographic stats. Find where region
 
 - [ ] **Step 2: Verify "relance" wording is deployed**
 
-Run: `cd /home/teina/projects/thermopack-demo && grep -r "dernière relance" app/src/ --include="*.tsx" --include="*.ts"`
+Run: `cd ~/projects/thermopack-demo && grep -r "dernière relance" app/src/ --include="*.tsx" --include="*.ts"`
 
 If matches found, replace with "relance". If none found, the fix from the previous session is already in place.
 
 - [ ] **Step 3: Verify build**
 
-Run: `cd /home/teina/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
+Run: `cd ~/projects/thermopack-demo/app && npx next build 2>&1 | tail -20`
 Expected: Build succeeds
 
 - [ ] **Step 4: Commit**

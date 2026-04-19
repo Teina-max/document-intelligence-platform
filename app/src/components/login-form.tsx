@@ -84,7 +84,7 @@ export function LoginForm() {
               <Input
                 id="email"
                 type="email"
-                placeholder="alicia@thermopack.fr"
+                placeholder="user@thermopack.example"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required

@@ -55,7 +55,7 @@ Plutot que d'attendre la validation d'Alice/Éric Martin sur le ton et le conten
 **Bloque US-006 (Relances auto)**
 
 Pour envoyer les relances depuis une adresse ThermoPack (pas une adresse perso). On a besoin :
-- Adresse email d'envoi (ex: pieces@thermopack.fr ou commercial@thermopack.fr)
+- Adresse email d'envoi (ex: pieces@thermopack.example ou commercial@thermopack.example)
 - Autorisation OAuth2 sur le tenant Microsoft 365 ThermoPack
 
 **Action** : Alice ou IT ThermoPack autorise l'application n8n sur leur tenant M365.
@@ -67,7 +67,7 @@ Pour envoyer les relances depuis une adresse ThermoPack (pas une adresse perso).
 L'app est prete, il faut la deployer pour qu'Alice/Éric Martin puissent l'utiliser. Options :
 - **Vercel** (gratuit, simple) → sous-domaine type thermopack.vercel.app
 - **Sous-domaine ** → thermopack.example.com
-- **Domaine client** → app.thermopack.fr (necessite config DNS cote ThermoPack)
+- **Domaine client** → app.thermopack.example (necessite config DNS cote ThermoPack)
 
 **Action** :  tranche l'option, on deploie dans la foulee.
 

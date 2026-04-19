@@ -3,7 +3,7 @@
 # Usage: ./scripts/batch-ingest-pdfs.sh [delay_seconds]
 
 WEBHOOK_URL="https://n8n.example.com/webhook/thermopack/ingest-pdf"
-DOCS_DIR="/home/teina/projects/thermopack-demo/docs"
+DOCS_DIR="~/projects/thermopack-demo/docs"
 DELAY="${1:-12}"
 MAX_RETRIES=2
 RETRY_DELAY=30

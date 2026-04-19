@@ -231,7 +231,7 @@ Tel.: {{tel}}
 | Stop si commande recue | Automatique | Oui |
 | Stop si offre expiree sans relance J-1 | Automatique | Oui |
 | Expediteur | Alice Durand | Oui |
-| Email expediteur | a.maraval@thermopack.fr ? | Oui |
+| Email expediteur | a.durand@thermopack.example ? | Oui |
 | Piece jointe PDF | Offre originale | Oui |
 | Max relances par jour (rate limit) | 20 emails/jour ? | Oui |
 | Exclusion manuelle | Liste noire entreprises ? | Oui |
