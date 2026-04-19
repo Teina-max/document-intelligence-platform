@@ -20,6 +20,9 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # Root utility scripts (pdfkit, supabase-js, exceljs)
   - package-ecosystem: "npm"
@@ -33,6 +36,9 @@ updates:
     labels:
       - "dependencies"
       - "root"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions (future-proofing)
   - package-ecosystem: "github-actions"
@@ -41,3 +47,6 @@ updates:
       interval: "monthly"
     labels:
       - "ci"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
