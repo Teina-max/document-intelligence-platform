@@ -1,0 +1,283 @@
+{
+  "updatedAt": "2026-03-26T12:50:21.402Z",
+  "createdAt": "2026-03-26T12:46:52.959Z",
+  "id": "t2yDP6p6STPCyuJi",
+  "name": "ThermoPack - WF-003b Opt-out Relance",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "path": "thermopack/stop-relance",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "83327c2d-990c-4554-85ba-9a7ebbf66fd7",
+      "name": "Webhook Stop Relance",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "thermopack-stop-relance",
+      "notes": "GET /webhook/thermopack/stop-relance?offre_id=UUID&ref=REF\nDeclenche par le clic 'Ne plus recevoir' dans l'email de relance."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Valider les parametres\nconst query = $input.first().json.query || {};\nconst offreId = query.offre_id;\nconst ref = query.ref;\n\nif (!offreId) {\n  throw new Error('Parametre offre_id manquant');\n}\n\nreturn [{ json: { offre_id: offreId, reference_offre: ref || 'N/A' } }];"
+      },
+      "id": "5890cd30-3449-4a00-a920-cc48eafe5ebd",
+      "name": "Valider Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        0
+      ],
+      "notes": "Valide que offre_id est present dans les query params."
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://{ANON_SUPABASE_REF}.supabase.co/rest/v1/offres?id=eq.{{ $json.offre_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"relance_stoppee\": true, \"relance_stoppee_at\": \"{{ new Date().toISOString() }}\"}",
+        "options": {}
+      },
+      "id": "7d8e8853-e241-4f9a-8680-74ffc8a5ae76",
+      "name": "Marquer Offre Opt-out",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        0
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "onError": "continueErrorOutput",
+      "notes": "PATCH offres SET relance_stoppee=true, relance_stoppee_at=now()"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "offres",
+        "limit": 1,
+        "filterType": "string",
+        "filterString": "id=eq.{{ $('Valider Params').first().json.offre_id }}&select=*,entreprises(nom,pays,contact_email)"
+      },
+      "id": "0d3fac23-bcf0-4fe1-a90e-3df129c7426f",
+      "name": "Recuperer Offre + Entreprise",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        848,
+        -112
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "notes": "Recupere les details de l'offre pour la notification interne."
+    },
+    {
+      "parameters": {
+        "toRecipients": "alice.durand@thermopack.example",
+        "subject": "=Relance stoppee — {{ $('Valider Params').first().json.reference_offre }} ({{ $json.entreprises?.nom || 'Client' }})",
+        "bodyContent": "=Le client <b>{{ $json.entreprises?.nom || 'N/A' }}</b> ne souhaite plus recevoir de relances pour l'offre <b>{{ $json.reference_offre }}</b> ({{ $json.montant_ht }} EUR HT).\n\n<br><br>L'offre a ete marquee comme <b>relance stoppee</b>. Aucun email de suivi ne sera envoye.\n\n<br><br><i>Action automatique — WF-003b</i>",
+        "additionalFields": {
+          "bodyContentType": "html"
+        }
+      },
+      "id": "5e36d960-895f-42f3-95de-3403f8c64eb7",
+      "name": "Notifier Alice",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        -112
+      ],
+      "webhookId": "28f3dfc0-559a-4749-8692-13808e72ac8a",
+      "onError": "continueErrorOutput",
+      "notes": "Notifie Alice que le client a stoppe les relances pour cette offre."
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<!DOCTYPE html><html lang=\"fr\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"><title>Relance annulee</title></head><body style=\"margin:0;padding:0;background-color:#f4f5f7;font-family:Arial,sans-serif;\"><table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background-color:#f4f5f7;padding:64px 0;\"><tr><td align=\"center\"><table role=\"presentation\" width=\"500\" cellpadding=\"0\" cellspacing=\"0\" style=\"background-color:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);padding:48px 32px;text-align:center;\"><tr><td><div style=\"width:64px;height:64px;background-color:#E8F5E9;border-radius:50%;margin:0 auto 24px;line-height:64px;font-size:28px;\">&#10003;</div><h1 style=\"margin:0 0 16px;font-size:22px;color:#1a1a1a;\">Demande prise en compte</h1><p style=\"margin:0 0 24px;font-size:15px;line-height:1.6;color:#666;\">Vous ne recevrez plus de rappels concernant l'offre <strong>{{ $('Valider Params').first().json.reference_offre }}</strong>.</p><p style=\"margin:0;font-size:13px;color:#999;\">ThermoPack Industries — Pieces detachees</p></td></tr></table></td></tr></table></body></html>",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "81d79219-60d2-4300-9c7b-d6906c5e36bb",
+      "name": "Page Confirmation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1360,
+        -96
+      ],
+      "notes": "Retourne une page HTML de confirmation au client."
+    },
+    {
+      "parameters": {
+        "tableId": "error_logs"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        832,
+        96
+      ],
+      "id": "bbbbb7d2-2576-4795-81b9-e957de9ab9b4",
+      "name": "Error Logs",
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Stop Relance": {
+      "main": [
+        [
+          {
+            "node": "Valider Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valider Params": {
+      "main": [
+        [
+          {
+            "node": "Marquer Offre Opt-out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marquer Offre Opt-out": {
+      "main": [
+        [
+          {
+            "node": "Recuperer Offre + Entreprise",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recuperer Offre + Entreprise": {
+      "main": [
+        [
+          {
+            "node": "Notifier Alice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notifier Alice": {
+      "main": [
+        [
+          {
+            "node": "Page Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Page Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "3a1fa837-a68e-442b-9c4e-4a0cf4483c21",
+  "activeVersionId": null,
+  "versionCounter": 2,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-03-26T12:46:52.961Z",
+      "createdAt": "2026-03-26T12:46:52.961Z",
+      "role": "workflow:owner",
+      "workflowId": "t2yDP6p6STPCyuJi",
+      "projectId": "O7LZ54FANArycjaL",
+      "project": {
+        "updatedAt": "2026-03-26T11:55:34.833Z",
+        "createdAt": "2026-03-26T11:50:47.448Z",
+        "id": "O7LZ54FANArycjaL",
+        "name": "ThermoPack Demo <demo@thermopack.example>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "2a544a42-b8a8-4d8c-adfa-37180eceb35c"
+      }
+    }
+  ],
+  "tags": [
+    {
+      "updatedAt": "2026-03-27T15:26:49.817Z",
+      "createdAt": "2026-03-27T15:26:49.817Z",
+      "id": "8HJoqYeLRVz7Wjfc",
+      "name": "ThermoPack"
+    }
+  ],
+  "activeVersion": null
+}

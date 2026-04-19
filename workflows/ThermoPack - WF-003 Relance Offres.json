@@ -1,0 +1,427 @@
+{
+  "updatedAt": "2026-03-26T12:51:07.821Z",
+  "createdAt": "2026-03-26T12:46:40.749Z",
+  "id": "IB3xjoFMubo0bfgy",
+  "name": "ThermoPack - WF-003 Relance Offres Non Transformees",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "8da7ad6b-2291-4c55-b345-14a1191a21a8",
+      "name": "CRON L-V 9h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        3312,
+        752
+      ],
+      "notes": "Lundi a vendredi a 9h (heure Paris). Verifie les offres proches de l'expiration."
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "offres",
+        "returnAll": true,
+        "filterType": "string",
+        "filterString": "statut=eq.en_attente&date_expiration=not.is.null&relance_stoppee=eq.false"
+      },
+      "id": "9fcec9a8-0873-4885-9b46-8c2db1e386d7",
+      "name": "Offres en Attente",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        3536,
+        656
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "notes": "Recupere offres en_attente avec date d'expiration, exclut les opt-out (relance_stoppee=false)."
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "relances_log",
+        "returnAll": true,
+        "filterType": "string",
+        "filterString": "statut=eq.envoye"
+      },
+      "id": "c9def97a-f387-40e7-94d1-f62d7abfc359",
+      "name": "Relances Deja Envoyees",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        3536,
+        848
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "notes": "Anti-doublon: recupere les relances deja envoyees."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determine quelles offres doivent etre relancees et a quel palier\nconst offres = $('Offres en Attente').all().map(i => i.json);\nconst relancesExistantes = $('Relances Deja Envoyees').all().map(i => i.json);\n\nconst now = new Date();\nconst results = [];\n\n// Index des relances existantes: offre_id -> Set de paliers\nconst relancesIndex = {};\nfor (const r of relancesExistantes) {\n  if (!relancesIndex[r.offre_id]) relancesIndex[r.offre_id] = new Set();\n  relancesIndex[r.offre_id].add(r.palier);\n}\n\n// Paliers de relance (jours avant expiration)\nconst paliers = [\n  { jours: 30, palier: 'J-30' },\n  { jours: 15, palier: 'J-15' },\n  { jours: 7,  palier: 'J-7' },\n  { jours: 1,  palier: 'J-1' }\n];\n\nfor (const offre of offres) {\n  if (!offre.date_expiration) continue;\n\n  const dateExp = new Date(offre.date_expiration);\n  const joursRestants = Math.ceil((dateExp - now) / (1000 * 60 * 60 * 24));\n\n  // Trouver le palier applicable (tolerance ±2 jours)\n  for (const p of paliers) {\n    if (joursRestants >= p.jours - 2 && joursRestants <= p.jours + 2) {\n      // Anti-doublon\n      if (relancesIndex[offre.id]?.has(p.palier)) continue;\n\n      results.push({\n        json: {\n          offre_id: offre.id,\n          reference_offre: offre.reference_offre,\n          entreprise_id: offre.entreprise_id,\n          montant_ht: offre.montant_ht,\n          date_offre: offre.date_offre,\n          date_expiration: offre.date_expiration,\n          correspondant: offre.correspondant,\n          fichier_source: offre.fichier_source,\n          jours_restants: joursRestants,\n          palier: p.palier\n        }\n      });\n      break;\n    }\n  }\n}\n\nif (results.length === 0) {\n  return [{ json: { _no_relances: true } }];\n}\n\nreturn results;"
+      },
+      "id": "16a04bbb-f258-4866-8af6-798f03844288",
+      "name": "Calculer Relances",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3760,
+        752
+      ],
+      "notes": "Determine quelles offres relancer et a quel palier.\nTolerance ±2 jours. Anti-doublon via relances_log."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c_has_relances",
+              "leftValue": "={{ $json._no_relances }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "12c836d8-3226-4440-864c-40ef185de219",
+      "name": "Relances a envoyer ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3984,
+        752
+      ],
+      "notes": "Stop si aucune relance necessaire."
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "entreprises",
+        "limit": 1,
+        "filterType": "string",
+        "filterString": "=id=eq.{{ $json.entreprise_id }}"
+      },
+      "id": "5a0cd2fe-04aa-4579-a543-35ad6e107f00",
+      "name": "Recuperer Entreprise",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        4208,
+        656
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "notes": "Recupere les infos entreprise (pays, contact_email, contact_nom)."
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "email_templates",
+        "limit": 1,
+        "filterType": "string",
+        "filterString": "palier=eq.{{ $('Relances a envoyer ?').item.json.palier }}&langue=eq.{{ $json.pays === 'ES' ? 'es' : 'fr' }}&actif=eq.true"
+      },
+      "id": "811b940e-bad6-48ac-90a9-7d30f11872e1",
+      "name": "Recuperer Template",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        4432,
+        656
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "notes": "Fetch le template HTML depuis email_templates selon palier + langue (pays entreprise)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Remplace les variables {{...}} dans le template HTML\nconst offre = $('Relances a envoyer ?').first().json;\nconst entreprise = $('Recuperer Entreprise').first().json;\nconst template = $('Recuperer Template').first().json;\n\n// Config expediteur (a ajuster selon config client)\nconst expediteur = {\n  nom: 'Alice Durand',\n  titre: 'Assistante administration des ventes',\n  email: 'alice.durand@thermopack.example',\n  tel: '01 60 86 10 25'\n};\n\n// URL webhook opt-out (WF-003b)\nconst N8N_BASE = 'https://n8n.example.com';\nconst lienStopRelance = `${N8N_BASE}/webhook/thermopack/stop-relance?offre_id=${offre.offre_id}&ref=${encodeURIComponent(offre.reference_offre)}`;\n\n// Formater montant\nconst montantFormate = new Intl.NumberFormat(entreprise.pays === 'ES' ? 'es-ES' : 'fr-FR', {\n  minimumFractionDigits: 2,\n  maximumFractionDigits: 2\n}).format(offre.montant_ht || 0);\n\n// Formater date\nconst dateExp = new Date(offre.date_expiration);\nconst dateFormatee = dateExp.toLocaleDateString(entreprise.pays === 'ES' ? 'es-ES' : 'fr-FR', {\n  day: '2-digit', month: 'long', year: 'numeric'\n});\n\n// Nom contact avec fallback\nconst nomContact = entreprise.contact_nom || (entreprise.pays === 'ES' ? 'Estimado/a cliente' : 'Madame, Monsieur');\n\n// Remplacement des variables\nlet html = template.corps_html;\nlet objet = template.objet;\n\nconst vars = {\n  '{{nom_contact}}': nomContact,\n  '{{entreprise}}': entreprise.nom,\n  '{{reference_offre}}': offre.reference_offre,\n  '{{montant_ht}}': montantFormate,\n  '{{date_expiration}}': dateFormatee,\n  '{{jours_restants}}': String(offre.jours_restants),\n  '{{expediteur_nom}}': expediteur.nom,\n  '{{expediteur_titre}}': expediteur.titre,\n  '{{expediteur_email}}': expediteur.email,\n  '{{tel}}': expediteur.tel,\n  '{{lien_stop_relance}}': lienStopRelance\n};\n\nfor (const [key, val] of Object.entries(vars)) {\n  html = html.split(key).join(val);\n  objet = objet.split(key).join(val);\n}\n\nconst destinataire = entreprise.contact_email;\nif (!destinataire) {\n  throw new Error(`Pas d'email pour ${entreprise.nom} (id: ${entreprise.id})`);\n}\n\nreturn [{\n  json: {\n    offre_id: offre.offre_id,\n    reference_offre: offre.reference_offre,\n    entreprise_nom: entreprise.nom,\n    palier: offre.palier,\n    email_destinataire: destinataire,\n    email_sujet: objet,\n    email_html: html,\n    pays: entreprise.pays || 'FR',\n    expediteur_email: expediteur.email\n  }\n}];"
+      },
+      "id": "336a5558-b3e4-40f3-8d7d-f1426758dfbc",
+      "name": "Injecter Variables Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4656,
+        656
+      ],
+      "notes": "Remplace toutes les variables {{...}} dans le HTML et l'objet.\nGenere le lien opt-out pour chaque offre."
+    },
+    {
+      "parameters": {
+        "toRecipients": "={{ $json.email_destinataire }}",
+        "subject": "={{ $json.email_sujet }}",
+        "bodyContent": "={{ $json.email_html }}",
+        "additionalFields": {
+          "importance": "={{ $json.palier === 'J-1' ? 'high' : 'normal' }}",
+          "bodyContentType": "html"
+        }
+      },
+      "id": "b065cfc1-e72b-4c81-af1d-817c65047f47",
+      "name": "Envoyer Email Outlook",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        4880,
+        656
+      ],
+      "webhookId": "cfe4cba9-138a-46c0-8b0a-689da6a67788",
+      "onError": "continueErrorOutput",
+      "notes": "Envoie l'email HTML via Microsoft Outlook.\nImportance HIGH pour J-1.\nTODO: Ajouter piece jointe PDF si disponible dans OneDrive."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare le log de relance (succes ou erreur)\nconst data = $input.first().json;\nconst relanceData = $('Injecter Variables Template').first().json;\n\nconst isError = !!data.error || !!data.errorMessage;\n\nreturn [{\n  json: {\n    offre_id: relanceData.offre_id,\n    reference_offre: relanceData.reference_offre,\n    entreprise_nom: relanceData.entreprise_nom,\n    palier: relanceData.palier,\n    email_destinataire: relanceData.email_destinataire,\n    email_sujet: relanceData.email_sujet,\n    statut: isError ? 'erreur' : 'envoye',\n    erreur: isError ? JSON.stringify(data).substring(0, 500) : null\n  }\n}];"
+      },
+      "id": "cb025121-8dfd-4dd4-9aed-4c33e9767b96",
+      "name": "Preparer Log Relance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5104,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "tableId": "relances_log",
+        "dataToSend": "autoMapInputData"
+      },
+      "id": "f72c670a-bde0-404d-97ff-38f96f239e95",
+      "name": "Log Relance",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        5328,
+        656
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "{ANON_SUPABASE_CRED_ID}",
+          "name": "Supabase-ThermoPack"
+        }
+      },
+      "notes": "Log chaque relance (succes ou erreur) pour anti-doublon et suivi."
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4208,
+        848
+      ],
+      "id": "9ca6b187-bd68-49e5-a458-885ba1facd3d",
+      "name": "No Operation, do nothing"
+    }
+  ],
+  "connections": {
+    "CRON L-V 9h": {
+      "main": [
+        [
+          {
+            "node": "Offres en Attente",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Relances Deja Envoyees",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Offres en Attente": {
+      "main": [
+        [
+          {
+            "node": "Calculer Relances",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relances Deja Envoyees": {
+      "main": [
+        [
+          {
+            "node": "Calculer Relances",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculer Relances": {
+      "main": [
+        [
+          {
+            "node": "Relances a envoyer ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relances a envoyer ?": {
+      "main": [
+        [
+          {
+            "node": "Recuperer Entreprise",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recuperer Entreprise": {
+      "main": [
+        [
+          {
+            "node": "Recuperer Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recuperer Template": {
+      "main": [
+        [
+          {
+            "node": "Injecter Variables Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Injecter Variables Template": {
+      "main": [
+        [
+          {
+            "node": "Envoyer Email Outlook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer Email Outlook": {
+      "main": [
+        [
+          {
+            "node": "Preparer Log Relance",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparer Log Relance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparer Log Relance": {
+      "main": [
+        [
+          {
+            "node": "Log Relance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "31969342-b6d1-4f61-9d0d-d58d3f1c9219",
+  "activeVersionId": null,
+  "versionCounter": 2,
+  "triggerCount": 0,
+  "shared": [
+    {
+      "updatedAt": "2026-03-26T12:46:40.754Z",
+      "createdAt": "2026-03-26T12:46:40.754Z",
+      "role": "workflow:owner",
+      "workflowId": "IB3xjoFMubo0bfgy",
+      "projectId": "O7LZ54FANArycjaL",
+      "project": {
+        "updatedAt": "2026-03-26T11:55:34.833Z",
+        "createdAt": "2026-03-26T11:50:47.448Z",
+        "id": "O7LZ54FANArycjaL",
+        "name": "ThermoPack Demo <demo@thermopack.example>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "2a544a42-b8a8-4d8c-adfa-37180eceb35c"
+      }
+    }
+  ],
+  "tags": [
+    {
+      "updatedAt": "2026-03-27T15:26:49.817Z",
+      "createdAt": "2026-03-27T15:26:49.817Z",
+      "id": "8HJoqYeLRVz7Wjfc",
+      "name": "ThermoPack"
+    }
+  ],
+  "activeVersion": null
+}

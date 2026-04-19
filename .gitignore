@@ -1,0 +1,77 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Node / Bun
+node_modules/
+.pnp.*
+bun.lock
+package-lock.json
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+
+# Vercel
+.vercel/
+
+# Build outputs
+dist/
+build/
+
+# Tests / coverage
+coverage/
+.nyc_output/
+test-results/
+test-upload/
+playwright-report/
+playwright/.cache/
+
+# Python / venv
+.venv/
+__pycache__/
+*.pyc
+
+# Supabase local
+supabase/.temp/
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Claude session state
+.superpowers/
+
+# Client data — NEVER commit real client files
+*.xlsx
+*.XLSX
+docs/commandes transformer/
+docs/commandes sans offres/
+docs/Offres non validés/
+docs/Mail workflow actuel/
+docs/nouveaux docs/
+docs/Capture d'écran*
+docs/*.png
+docs/Liste client*
+
+# Anonymization internals — real→fake mapping must stay local
+docs/ANONYMIZATION_MAP.md
+
+# Supabase prod protection rule contains the real prod ref —
+# keep local. A sanitized version can be committed later.
+.claude/rules/supabase-prod-protection.md
+
+# Anonymization script encodes the real→fake mapping — keep local.
+scripts/anonymize.ts
+
+# Generated migration bundle — regenerated on demand.
+scripts/_combined-migrations.sql
+
+# Misc
+.mcp.json
+skills-lock.json

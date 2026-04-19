@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Preview Templates Relance — ThermoPack Industries</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+    .header { padding: 24px 32px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+    .header h1 { font-size: 20px; font-weight: 600; }
+    .header h1 span { color: #64748b; font-weight: 400; }
+
+    .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .controls label { font-size: 13px; color: #94a3b8; }
+
+    .tab-bar { display: flex; gap: 4px; padding: 16px 32px 0; background: #1e293b; }
+    .tab { padding: 10px 20px; font-size: 13px; font-weight: 600; border-radius: 8px 8px 0 0; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; border-bottom: none; color: #94a3b8; background: transparent; }
+    .tab:hover { background: #334155; color: #e2e8f0; }
+    .tab.active { background: #0f172a; color: #fff; border-color: #334155; }
+    .tab.j30 { border-top: 3px solid #003B73; }
+    .tab.j15 { border-top: 3px solid #D97706; }
+    .tab.j7 { border-top: 3px solid #DC2626; }
+    .tab.j1 { border-top: 3px solid #7F1D1D; }
+
+    .lang-toggle { display: flex; gap: 0; border: 1px solid #475569; border-radius: 6px; overflow: hidden; }
+    .lang-btn { padding: 6px 16px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; color: #94a3b8; background: transparent; }
+    .lang-btn:hover { background: #334155; }
+    .lang-btn.active { background: #003B73; color: #fff; }
+
+    .preview-area { padding: 32px; display: flex; justify-content: center; }
+    .email-frame { width: 660px; background: #fff; border-radius: 8px; box-shadow: 0 4px 24px rgba(0,0,0,0.4); overflow: hidden; }
+    .email-frame iframe { width: 100%; height: 800px; border: none; }
+
+    .meta { padding: 16px 32px; background: #1e293b; border-top: 1px solid #334155; display: flex; gap: 24px; flex-wrap: wrap; }
+    .meta-item { font-size: 12px; color: #64748b; }
+    .meta-item strong { color: #94a3b8; }
+
+    .loading { text-align: center; padding: 64px; color: #64748b; font-size: 15px; }
+    .error { text-align: center; padding: 32px; color: #ef4444; font-size: 14px; background: #1e293b; border-radius: 8px; margin: 32px; }
+
+    .status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .status.ok { background: #064e3b; color: #6ee7b7; }
+    .status.count { background: #1e3a5f; color: #93c5fd; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Templates Relance <span>— ThermoPack Industries</span></h1>
+  <div class="controls">
+    <div class="status ok" id="status">Chargement...</div>
+    <div class="lang-toggle">
+      <button class="lang-btn active" data-lang="fr" onclick="setLang('fr')">FR</button>
+      <button class="lang-btn" data-lang="es" onclick="setLang('es')">ES</button>
+    </div>
+  </div>
+</div>
+
+<div class="tab-bar" id="tabs"></div>
+
+<div class="preview-area">
+  <div class="email-frame">
+    <iframe id="preview" sandbox="allow-same-origin"></iframe>
+  </div>
+</div>
+
+<div class="meta" id="meta"></div>
+
+<script>
+// ============================================================
+// CONFIG — Remplir avec les credentials Supabase
+// ============================================================
+const SUPABASE_URL = 'https://{ANON_SUPABASE_REF}.supabase.co';
+const SUPABASE_ANON_KEY = '{ANON_SUPABASE_ANON_KEY}';
+
+// Donnees fictives pour la preview
+const SAMPLE_DATA = {
+  '{{nom_contact}}': 'M. Jean Dupont',
+  '{{entreprise}}': 'Plastiform SAS',
+  '{{reference_offre}}': 'OFF-2026-0142',
+  '{{montant_ht}}': '12 450,00',
+  '{{date_expiration}}': '25 avril 2026',
+  '{{jours_restants}}': '30',
+  '{{expediteur_nom}}': 'Alice Durand',
+  '{{expediteur_titre}}': 'Assistante administration des ventes',
+  '{{expediteur_email}}': 'alice.durand@thermopack.example',
+  '{{tel}}': '01 60 86 10 25',
+  '{{lien_stop_relance}}': '#opt-out-demo'
+};
+
+let templates = [];
+let currentPalier = 'J-30';
+let currentLang = 'fr';
+
+async function fetchTemplates() {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/email_templates?actif=eq.true&order=palier.asc,langue.asc&select=*`,
+      {
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        }
+      }
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    templates = await res.json();
+
+    document.getElementById('status').textContent = `${templates.length} templates`;
+    document.getElementById('status').className = 'status count';
+
+    renderTabs();
+    renderPreview();
+  } catch (err) {
+    document.getElementById('status').textContent = 'Erreur';
+    document.getElementById('status').className = 'status';
+    document.getElementById('status').style.background = '#7f1d1d';
+    document.getElementById('status').style.color = '#fca5a5';
+    document.querySelector('.preview-area').innerHTML = `<div class="error">Erreur: ${err.message}<br><br>Verifiez la cle SUPABASE_ANON_KEY dans le fichier.</div>`;
+  }
+}
+
+function renderTabs() {
+  const paliers = [...new Set(templates.map(t => t.palier))];
+  const tabBar = document.getElementById('tabs');
+  tabBar.innerHTML = paliers.map(p => {
+    const cls = p.toLowerCase().replace('-', '');
+    return `<button class="tab ${cls} ${p === currentPalier ? 'active' : ''}" onclick="setPalier('${p}')">${p}</button>`;
+  }).join('');
+}
+
+function setPalier(p) {
+  currentPalier = p;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tab[onclick="setPalier('${p}')"]`).classList.add('active');
+  renderPreview();
+}
+
+function setLang(l) {
+  currentLang = l;
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.lang-btn[data-lang="${l}"]`).classList.add('active');
+  renderPreview();
+}
+
+function renderPreview() {
+  const tpl = templates.find(t => t.palier === currentPalier && t.langue === currentLang);
+  if (!tpl) return;
+
+  // Remplacer les variables par des donnees fictives
+  let html = tpl.corps_html;
+  for (const [key, val] of Object.entries(SAMPLE_DATA)) {
+    html = html.split(key).join(val);
+  }
+
+  const iframe = document.getElementById('preview');
+  iframe.srcdoc = html;
+
+  // Meta
+  document.getElementById('meta').innerHTML = `
+    <div class="meta-item"><strong>Objet :</strong> ${replaceVars(tpl.objet)}</div>
+    <div class="meta-item"><strong>Palier :</strong> ${tpl.palier}</div>
+    <div class="meta-item"><strong>Langue :</strong> ${tpl.langue.toUpperCase()}</div>
+    <div class="meta-item"><strong>Taille :</strong> ${(tpl.corps_html.length / 1024).toFixed(1)} KB</div>
+    <div class="meta-item"><strong>Mis a jour :</strong> ${new Date(tpl.updated_at).toLocaleString('fr-FR')}</div>
+  `;
+}
+
+function replaceVars(str) {
+  for (const [key, val] of Object.entries(SAMPLE_DATA)) {
+    str = str.split(key).join(val);
+  }
+  return str;
+}
+
+fetchTemplates();
+</script>
+
+</body>
+</html>
