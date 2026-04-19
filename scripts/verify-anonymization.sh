@@ -87,7 +87,10 @@ check_regex "Alicia firstname"          '\bAlicia\b' i
 check_regex "Geraldine firstname"       '\bG[eé]raldine\b' i
 check_regex "Younes firstname"          '\bYounes\b' i
 check_regex "Balla firstname"           '\bBalla\b' i
+check_regex "Belkharraf surname"        '\bbelkharraf\b' i
+check_regex "La Dinguerie partner"      'ladinguerie' i
 check_regex "Host /home/username path"  '/home/[a-z][a-z0-9_-]+'
+check_regex "jean-claude-v2 host path"  'jean-claude-v2'
 check_regex "thermopack .fr (should be .example)" 'thermopack\.fr'
 
 # 3. Supabase prod ref
